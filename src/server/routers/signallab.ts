@@ -14,7 +14,7 @@ import { marketData } from "../services/market-data";
 
 const ALL_TICKERS =
   "TSLA,NVDA,AMD,COIN,MSTR,PLTR,MARA,RIOT,GME,AMC,SOFI,RIVN,LCID,NIO,CVNA,SMCI,CRWD,NET,ANET,MRVL,POET,HOOD,RDDT,UBER,SHOP,SPY,QQQ,IWM,AAPL,META,GOOGL,MSFT,AMZN,AVGO";
-const OZAN_TICKERS = "OSCR,EOSE,BMNR,IREN,CLS,MU,CRDO,SNDK,AAOI,PENG,GLW";
+const OZAN_TICKERS = "NASA,RKLB,DRAM,MRVL,NNE,AMBA,CBRS,OSCR,EOSE,BMNR,IREN,CLS,MU,CRDO,SNDK,AAOI,PENG,GLW";
 const CSP_RISK_FREE_RATE = 0.045;
 
 // ─── CSP Helper Types ────────────────────────────────────────────────────────
@@ -60,8 +60,9 @@ interface CSPContract {
   premiumScore: number;
   safetyScore: number;
   liquidityScore: number;
-  eventDataScore: number;
+  qualityScore: number;
   cspScore: number;
+  annualizedYield: number;
   actionLabel: string;
   riskNotes: string[];
   rejected: boolean;

@@ -282,32 +282,32 @@ export default function CSPScreenerPage() {
         <div className="space-y-3">
           <h2 className="text-sm font-bold text-white">🎯 Top CSP Picks</h2>
           {(["70-100", "100-140", "140+"] as const).map((bucket) => {
-            const picks = (data.topPicks as Record<string, Array<{ ticker: string; strike: number; expiry: string; dte: number; mid: number; iv: number | null; collateral: number; premium: number; cspScore: number; executablePremiumAmount: number; delta: number | null; probabilityITM: number | null; expectedMoveBuffer: number | null; spreadPct: number | null; companyQuality: string; actionLabel: string; riskNotes: string[]; executablePremium: number }>>)[bucket];
+            const picks = (data.topPicks as Record<string, Array<{ ticker: string; strike: number; expiry: string; dte: number; mid: number; iv: number | null; collateral: number; premium: number; cspScore: number; executablePremiumAmount: number; delta: number | null; probabilityITM: number | null; expectedMoveBuffer: number | null; spreadPct: number | null; companyQuality: string; actionLabel: string; riskNotes: string[]; annualizedYield: number; executablePremium: number }>>)[bucket];
             if (!picks || picks.length === 0) return null;
             return (
               <div key={bucket}>
                 <h3 className="text-xs font-semibold text-white/50 mb-2">IV {bucket}%</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                   {picks.map((p, i) => (
-                    <div key={i} className="rounded border border-white/[0.08] bg-[#0b0b0c] p-3 text-xs space-y-1">
+                    <div key={i} className="rounded border border-white/[0.08] bg-[#0b0b0c] p-3 text-xs space-y-1.5">
                       <div className="flex justify-between items-center">
-                        <span className="font-bold text-white">{p.ticker} {p.strike}P</span>
-                        <span className={cn("font-bold", p.cspScore >= 72 ? "text-emerald-400" : p.cspScore >= 50 ? "text-yellow-400" : "text-red-400")}>{p.cspScore}</span>
+                        <span className="font-bold text-white">{p.ticker} {p.strike}P Sell</span>
+                        <span className={cn("font-bold text-sm", p.cspScore >= 72 ? "text-emerald-400" : p.cspScore >= 50 ? "text-yellow-400" : "text-red-400")}>{p.cspScore}</span>
                       </div>
-                      <div className="text-white/50">{p.expiry} • {p.dte}g</div>
-                      <div className="grid grid-cols-2 gap-x-3 text-white/50">
-                        <span>Premium: <b className="text-white">${p.executablePremiumAmount?.toFixed(0)}</b></span>
-                        <span>IV: <b className="text-white">{p.iv?.toFixed(0)}%</b></span>
-                        <span>Delta: {p.delta?.toFixed(2) ?? "—"}</span>
-                        <span>P(ITM): {p.probabilityITM?.toFixed(1) ?? "—"}%</span>
-                        <span>EM Buffer: {p.expectedMoveBuffer?.toFixed(1) ?? "—"}x</span>
+                      <div className="text-white/40">{p.expiry} • {p.dte}g • <span className={cn(p.companyQuality === "A" ? "text-emerald-400" : p.companyQuality === "B" ? "text-blue-400" : "text-yellow-400")}>{p.companyQuality}-grade</span></div>
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-white/60">
+                        <span>Premium: <b className="text-emerald-400">${p.executablePremiumAmount?.toFixed(0)}</b></span>
+                        <span>Ann Yield: <b className="text-emerald-400">{(p as unknown as {annualizedYield?:number}).annualizedYield?.toFixed(0) ?? "—"}%</b></span>
+                        <span>Delta: <b className="text-white">{p.delta?.toFixed(2) ?? "—"}</b></span>
+                        <span>P(ITM): <b className="text-white">{p.probabilityITM?.toFixed(1) ?? "—"}%</b></span>
+                        <span>EM Buffer: <b className="text-white">{p.expectedMoveBuffer?.toFixed(1) ?? "—"}σ</b></span>
                         <span>Spread: {p.spreadPct?.toFixed(0) ?? "—"}%</span>
                       </div>
                       <div className="flex justify-between items-center pt-1">
-                        <span className={cn("text-[10px]", p.companyQuality === "A" ? "text-emerald-400" : p.companyQuality === "B" ? "text-blue-400" : "text-yellow-400")}>{p.companyQuality} • {p.actionLabel}</span>
+                        <span className="text-[10px] text-white/40">{p.actionLabel}</span>
                         <button onClick={() => addToBasket(p)} className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded hover:bg-emerald-500/30">+ Basket</button>
                       </div>
-                      {p.riskNotes?.length > 0 && <div className="text-[10px] text-orange-400/80">{p.riskNotes.slice(0, 2).join(" • ")}</div>}
+                      {p.riskNotes?.length > 0 && <div className="text-[10px] text-orange-400/80">{p.riskNotes.slice(0, 3).join(" • ")}</div>}
                     </div>
                   ))}
                 </div>

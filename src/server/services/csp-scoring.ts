@@ -14,14 +14,14 @@ export interface CSPScoringResult {
   delta: number | null; probabilityITM: number | null; expectedMove: number | null; expectedMoveBuffer: number | null;
   distanceToStrikePct: number; breakevenDiscountPct: number; spreadPct: number | null;
   premiumYield: number; premiumPerDay: number; premiumEfficiency: number | null;
+  annualizedYield: number;
   companyQuality: CSPCompanyGrade; companyComfortScore: number; companyNote: string;
-  premiumScore: number; safetyScore: number; liquidityScore: number; eventDataScore: number; cspScore: number;
+  premiumScore: number; safetyScore: number; liquidityScore: number; qualityScore: number; cspScore: number;
   actionLabel: string; riskNotes: string[]; rejected: boolean; rejectReason: string | null;
 }
 
 function clamp(v: number, min = 0, max = 100) { return Number.isFinite(v) ? Math.max(min, Math.min(max, v)) : min; }
 function scaleUp(v: number, lo: number, hi: number) { return hi <= lo ? 0 : clamp(((v - lo) / (hi - lo)) * 100); }
-function scaleDown(v: number, good: number, bad: number) { return bad <= good ? 0 : clamp(100 - ((v - good) / (bad - good)) * 100); }
 
 function normalCDF(x: number) {
   const sign = x < 0 ? -1 : 1; const z = Math.abs(x) / Math.sqrt(2);
@@ -31,40 +31,35 @@ function normalCDF(x: number) {
 }
 
 function getIVBucket(iv: number | null): IVBucket {
-  if (!iv || iv <= 0 || !Number.isFinite(iv)) return "unknown";
+  if (!iv || iv <= 0) return "unknown";
   if (iv >= 140) return "140+"; if (iv >= 100) return "100-140"; if (iv >= 70) return "70-100"; return "below-70";
-}
-
-function scoreDelta(d: number | null) {
-  if (d === null) return 35; const a = Math.abs(d);
-  if (a <= 0.08) return 100; if (a <= 0.12) return 92; if (a <= 0.18) return 82;
-  if (a <= 0.25) return 65; if (a <= 0.35) return 40; if (a <= 0.45) return 20; return 0;
-}
-function scoreEMBuffer(b: number | null) {
-  if (b === null) return 35;
-  if (b >= 2.0) return 100; if (b >= 1.7) return 90; if (b >= 1.4) return 78;
-  if (b >= 1.2) return 65; if (b >= 1.0) return 45; if (b >= 0.8) return 25; return 0;
 }
 
 export function scoreCSPContract(input: CSPScoringInput): CSPScoringResult {
   const riskNotes: string[] = [];
   const company = getCSPCompanyQuality(input.ticker);
   const ivBucket = getIVBucket(input.iv);
-  const spreadPct = input.bid > 0 && input.ask > 0 && input.mid > 0 ? ((input.ask - input.bid) / input.mid) * 100 : null;
+
+  // Executable premium (use bid, which is what you actually get)
   const executablePremium = input.bid > 0 ? input.bid : input.mid;
   const executablePremiumAmount = executablePremium * 100;
+  const spreadPct = input.bid > 0 && input.ask > 0 && input.mid > 0 ? ((input.ask - input.bid) / input.mid) * 100 : null;
+
+  // Yield calculations on executable premium
   const premiumYield = input.collateral > 0 ? (executablePremiumAmount / input.collateral) * 100 : 0;
   const premiumPerDay = input.dte > 0 ? premiumYield / input.dte : 0;
+  const annualizedYield = input.dte > 0 ? premiumYield * (365 / input.dte) : 0;
   const distanceToStrikePct = input.spot > 0 ? ((input.spot - input.strike) / input.spot) * 100 : 0;
   const breakevenDiscountPct = input.spot > 0 ? ((input.spot - (input.strike - executablePremium)) / input.spot) * 100 : 0;
 
-  // Risk metrics
+  // Risk metrics via Black-Scholes
   let delta: number | null = null, probabilityITM: number | null = null, expectedMove: number | null = null, expectedMoveBuffer: number | null = null;
   if (input.iv && input.iv > 0 && input.dte > 0 && input.spot > 0 && input.strike > 0) {
     const sigma = input.iv / 100, T = input.dte / 365, sqrtT = Math.sqrt(T), r = 0.045;
     const d1 = (Math.log(input.spot / input.strike) + (r + 0.5 * sigma * sigma) * T) / (sigma * sqrtT);
     const d2 = d1 - sigma * sqrtT;
-    delta = normalCDF(d1) - 1; probabilityITM = normalCDF(-d2) * 100;
+    delta = normalCDF(d1) - 1;
+    probabilityITM = normalCDF(-d2) * 100;
     expectedMove = input.spot * sigma * sqrtT;
     expectedMoveBuffer = expectedMove > 0 ? (input.spot - input.strike) / expectedMove : null;
   }
@@ -72,55 +67,103 @@ export function scoreCSPContract(input: CSPScoringInput): CSPScoringResult {
   const absDelta = delta !== null ? Math.abs(delta) : null;
   const premiumEfficiency = absDelta && absDelta > 0.01 ? premiumYield / absDelta : null;
 
+  // ─── Rejections ────────────────────────────────────────────────────────────
   let rejected = false, rejectReason: string | null = null;
-  if (input.dte < 3 || input.dte > 14) { rejected = true; rejectReason = "DTE outside 3-14 day target"; riskNotes.push("DTE outside target"); }
-  if (input.bid <= 0 || input.ask <= 0 || input.mid <= 0) { rejected = true; rejectReason = "Invalid quote"; riskNotes.push("Invalid quote"); }
-  if (company.grade === "X") { rejected = true; rejectReason = "Company excluded"; riskNotes.push("Company excluded"); }
 
-  if (ivBucket === "unknown") riskNotes.push("IV unavailable");
-  if (ivBucket === "below-70") riskNotes.push("IV below target");
-  if (ivBucket === "140+") riskNotes.push("Extreme IV: event risk");
-  if (spreadPct !== null && spreadPct > 25) riskNotes.push("Very wide spread");
-  else if (spreadPct !== null && spreadPct > 15) riskNotes.push("Wide spread");
-  if (input.oi >= 0 && input.oi < 50) riskNotes.push("Low OI");
-  if (absDelta !== null && absDelta > 0.35) riskNotes.push("High delta");
-  if (probabilityITM !== null && probabilityITM > 30) riskNotes.push("High P(ITM)");
-  if (expectedMoveBuffer !== null && expectedMoveBuffer < 1.0) riskNotes.push("Inside expected move");
-  if (company.grade === "D") riskNotes.push("Low assignment comfort");
-  if (company.grade === "C") riskNotes.push("Size carefully");
+  if (company.grade === "D" || company.grade === "X") {
+    rejected = true; rejectReason = `Company grade ${company.grade} — avoid assignment`;
+    riskNotes.push("Low quality / avoid assignment");
+  }
+  if (spreadPct !== null && spreadPct > 12) {
+    rejected = true; rejectReason = "Spread > 12% — illiquid";
+    riskNotes.push("Spread too wide (>12%)");
+  }
+  if (input.oi >= 0 && input.oi < 20) {
+    rejected = true; rejectReason = "OI < 20 — illiquid";
+    riskNotes.push("Very low OI");
+  }
+  if (input.bid <= 0) {
+    rejected = true; rejectReason = "No bid";
+    riskNotes.push("No bid quote");
+  }
 
-  const premiumScore = 0.4 * scaleUp(premiumYield, 0.25, 2.5) + 0.25 * scaleUp(premiumPerDay, 0.05, 0.35) + 0.25 * scaleUp(premiumEfficiency ?? 0, 3, 25) + 0.1 * scaleUp(executablePremiumAmount, 25, 500);
-  const safetyScore = 0.3 * scoreDelta(delta) + 0.3 * scoreEMBuffer(expectedMoveBuffer) + 0.2 * scaleUp(distanceToStrikePct, 5, 25) + 0.2 * scaleDown(probabilityITM ?? 35, 5, 35);
-  const liquidityScore = 0.4 * (spreadPct === null ? 30 : scaleDown(spreadPct, 5, 30)) + 0.3 * (input.oi < 0 ? 40 : scaleUp(input.oi, 50, 1000)) + 0.2 * (input.volume < 0 ? 35 : scaleUp(input.volume, 5, 200)) + 0.1 * (input.bid > 0 && input.ask > 0 ? 100 : 0);
-  let eventDataScore = 90; if (!input.iv) eventDataScore -= 25; if (input.oi < 0) eventDataScore -= 10; if (ivBucket === "140+" && safetyScore < 60) eventDataScore -= 10; eventDataScore = clamp(eventDataScore);
+  // ─── Risk notes ────────────────────────────────────────────────────────────
+  if (ivBucket === "140+") riskNotes.push("Extreme IV — possible event");
+  if (expectedMoveBuffer !== null && expectedMoveBuffer < 1.0) riskNotes.push("Inside 1σ move");
+  if (absDelta !== null && absDelta > 0.35 && company.grade !== "A") riskNotes.push("High delta (>0.35)");
+  if (probabilityITM !== null && probabilityITM > 25) riskNotes.push(`P(ITM) ${probabilityITM.toFixed(0)}%`);
 
-  let penalty = 0;
-  if (spreadPct !== null && spreadPct > 25) penalty += 20;
-  if (input.oi >= 0 && input.oi < 50) penalty += 15;
-  if (absDelta !== null && absDelta > 0.35) penalty += 20;
-  if (expectedMoveBuffer !== null && expectedMoveBuffer < 1.0) penalty += 20;
-  if (company.grade === "D") penalty += 12;
-  if (ivBucket === "140+" && safetyScore < 60) penalty += 10;
+  // ─── DTE penalty ───────────────────────────────────────────────────────────
+  let dtePenalty = 0;
+  if (input.dte < 4) { dtePenalty = 30; riskNotes.push("DTE too short (<4)"); }
+  else if (input.dte > 21) { dtePenalty = 20; riskNotes.push("DTE > 21 days"); }
+  else if (input.dte < 5) dtePenalty = 10;
+  else if (input.dte > 14) dtePenalty = 5;
+  // Sweet spot: 5-14 days = no penalty
 
-  const rawScore = 0.35 * premiumScore + 0.35 * safetyScore + 0.15 * company.score + 0.1 * liquidityScore + 0.05 * eventDataScore - penalty;
+  // ─── PREMIUM SCORE (40%) ───────────────────────────────────────────────────
+  const premiumScore = clamp(
+    0.5 * scaleUp(annualizedYield, 20, 200) +
+    0.3 * scaleUp(premiumPerDay, 0.03, 0.25) +
+    0.2 * scaleUp(executablePremiumAmount, 30, 400)
+  );
+
+  // ─── SAFETY SCORE (35%) ────────────────────────────────────────────────────
+  // Target band: |delta| 0.15-0.30, buffer >= 1.3σ
+  let deltaScore = 50;
+  if (absDelta !== null) {
+    if (absDelta >= 0.15 && absDelta <= 0.30) deltaScore = 90; // sweet spot
+    else if (absDelta < 0.10) deltaScore = 60; // too far OTM = low premium
+    else if (absDelta <= 0.35) deltaScore = company.grade === "A" ? 75 : 55; // A-grade gets slack
+    else if (absDelta <= 0.45) deltaScore = 25;
+    else deltaScore = 0;
+  }
+
+  let bufferScore = 50;
+  if (expectedMoveBuffer !== null) {
+    if (expectedMoveBuffer >= 1.8) bufferScore = 100;
+    else if (expectedMoveBuffer >= 1.3) bufferScore = 85;
+    else if (expectedMoveBuffer >= 1.0) bufferScore = 55;
+    else if (expectedMoveBuffer >= 0.7) bufferScore = 25;
+    else bufferScore = 0;
+  }
+
+  const safetyScore = clamp(0.5 * deltaScore + 0.3 * bufferScore + 0.2 * scaleUp(distanceToStrikePct, 3, 20));
+
+  // ─── QUALITY SCORE (15%) ───────────────────────────────────────────────────
+  let qualityScore = 50;
+  if (company.grade === "A") qualityScore = 100;
+  else if (company.grade === "B") qualityScore = 80;
+  else if (company.grade === "C") qualityScore = 50;
+  // D/X already rejected
+
+  // ─── LIQUIDITY SCORE (10%) ─────────────────────────────────────────────────
+  const liquidityScore = clamp(
+    0.5 * (spreadPct === null ? 30 : clamp(100 - (spreadPct / 12) * 100)) +
+    0.3 * (input.oi < 0 ? 40 : scaleUp(input.oi, 20, 500)) +
+    0.2 * (input.volume < 0 ? 30 : scaleUp(input.volume, 5, 100))
+  );
+
+  // ─── FINAL SCORE ───────────────────────────────────────────────────────────
+  const rawScore = 0.40 * premiumScore + 0.35 * safetyScore + 0.15 * qualityScore + 0.10 * liquidityScore - dtePenalty;
   const cspScore = rejected ? 0 : Math.round(clamp(rawScore));
 
+  // Action label
   let actionLabel = "Avoid";
-  if (rejected) actionLabel = `Reject - ${rejectReason}`;
-  else if (riskNotes.some(n => n.toLowerCase().includes("event"))) actionLabel = "High Premium / Event Risk";
-  else if (cspScore >= 82) actionLabel = "Strong CSP Candidate";
-  else if (cspScore >= 72) actionLabel = "Good Premium / Manageable Risk";
-  else if (cspScore >= 62) actionLabel = "Watchlist Candidate";
-  else if (cspScore >= 50) actionLabel = "High Risk / Size Small";
+  if (rejected) actionLabel = `Reject: ${rejectReason}`;
+  else if (cspScore >= 80) actionLabel = "Strong Sell Put";
+  else if (cspScore >= 70) actionLabel = "Good Opportunity";
+  else if (cspScore >= 60) actionLabel = "Watchlist";
+  else if (cspScore >= 45) actionLabel = "Size Small";
 
   return {
     executablePremium, executablePremiumAmount, ivBucket,
     delta, probabilityITM, expectedMove, expectedMoveBuffer,
     distanceToStrikePct, breakevenDiscountPct, spreadPct,
-    premiumYield, premiumPerDay, premiumEfficiency,
+    premiumYield, premiumPerDay, premiumEfficiency, annualizedYield,
     companyQuality: company.grade, companyComfortScore: company.score, companyNote: company.note,
     premiumScore: Math.round(clamp(premiumScore)), safetyScore: Math.round(clamp(safetyScore)),
-    liquidityScore: Math.round(clamp(liquidityScore)), eventDataScore: Math.round(clamp(eventDataScore)), cspScore,
-    actionLabel, riskNotes, rejected, rejectReason,
+    liquidityScore: Math.round(clamp(liquidityScore)), qualityScore: Math.round(clamp(qualityScore)),
+    cspScore, actionLabel, riskNotes, rejected, rejectReason,
   };
 }

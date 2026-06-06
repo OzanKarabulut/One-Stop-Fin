@@ -47,6 +47,7 @@ export const CSP_COMPANY_QUALITY: Record<string, CSPCompanyQuality> = {
   QQQ: { grade: "A", score: 93, note: "Nasdaq ETF; high assignment comfort." },
   IWM: { grade: "B", score: 80, note: "Small-cap ETF; assignable but more cyclical." },
   DRAM: { grade: "B", score: 74, note: "Theme ETF / sector exposure; check components and liquidity." },
+  NASA: { grade: "B", score: 72, note: "Space/defense theme; volatile but growing sector." },
 };
 
 export function getCSPCompanyQuality(ticker: string): CSPCompanyQuality {
