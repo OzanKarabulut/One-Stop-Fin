@@ -108,16 +108,15 @@ export function Sidebar() {
                     const starred = isFav(item.href);
                     return (
                       <div key={item.href}
-                        className={`group flex items-center h-[38px] pl-[42px] pr-3 transition-colors ${isActive ? "bg-[#141414] border-l-2 border-[#ff7200]" : "hover:bg-white/[0.03] border-l-2 border-transparent"}`}>
+                        className={`group relative flex items-center h-[38px] pl-[42px] pr-3 transition-colors ${isActive ? "bg-[#141414] border-l-2 border-[#ff7200]" : "hover:bg-white/[0.03] border-l-2 border-transparent"}`}>
                         <Link href={item.href}
-                          className={`text-[14px] flex-1 truncate ${isActive ? "text-[#ff7200] font-medium" : "text-[#b9b9b9] hover:text-white"}`}>
+                          className={`text-[14px] absolute inset-0 flex items-center pl-[42px] pr-[36px] ${isActive ? "text-[#ff7200] font-medium" : "text-[#b9b9b9] hover:text-white"}`}>
                           {label}
                         </Link>
                         <button
                           type="button"
-                          onMouseDown={(e) => e.stopPropagation()}
                           onClick={(e) => { e.preventDefault(); e.stopPropagation(); starred ? removeFav(item.href) : addFav(item.href, label); }}
-                          className={`p-1.5 rounded transition-all ${starred ? "text-[#ff7200]" : "text-white/30 hover:text-[#ff7200]"}`}
+                          className={`relative z-10 ml-auto p-1 rounded hover:bg-white/10 opacity-0 group-hover:opacity-100 ${starred ? "!opacity-100 text-[#ff7200]" : "text-white/40 hover:text-[#ff7200]"}`}
                           title={starred ? "Favorilerden kaldır" : "Favorilere ekle"}>
                           <Star size={13} fill={starred ? "currentColor" : "none"} />
                         </button>
