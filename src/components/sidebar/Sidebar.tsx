@@ -23,26 +23,23 @@ function t(key: string): string {
 
 interface FavoriteItem { href: string; labelKey: string; order: number; }
 
-// ─── Draggable Sub-Item ──────────────────────────────────────────────────────
 function DraggableSubItem({ href, label }: { href: string; label: string }) {
   const pathname = usePathname();
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: href, data: { href, label } });
   const isActive = pathname === href;
 
   return (
-    <div ref={setNodeRef} className={`group flex items-center h-[34px] transition-colors ${isActive ? "bg-[#141414] border-l-2 border-[#ff7200]" : "hover:bg-white/[0.03] border-l-2 border-transparent"} ${isDragging ? "opacity-30" : ""}`}
-      style={{ paddingLeft: "38px", paddingRight: "16px" }}>
+    <div ref={setNodeRef} className={`group flex items-center h-[38px] pl-[42px] pr-4 transition-colors ${isActive ? "bg-[#141414] border-l-2 border-[#ff7200]" : "hover:bg-white/[0.03] border-l-2 border-transparent"} ${isDragging ? "opacity-30" : ""}`}>
       <span {...attributes} {...listeners} className="mr-2 cursor-grab opacity-0 group-hover:opacity-50 hover:!opacity-100 transition-opacity flex-shrink-0">
-        <GripVertical size={11} />
+        <GripVertical size={12} />
       </span>
-      <Link href={href} className={`text-[13px] ${isActive ? "text-[#ff7200] font-medium" : "text-[#b9b9b9] hover:text-white"}`}>
+      <Link href={href} className={`text-[14px] ${isActive ? "text-[#ff7200] font-medium" : "text-[#b9b9b9] hover:text-white"}`}>
         {label}
       </Link>
     </div>
   );
 }
 
-// ─── Sortable Favorite ───────────────────────────────────────────────────────
 function SortableFavorite({ item, onRemove }: { item: FavoriteItem; onRemove: () => void }) {
   const pathname = usePathname();
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: item.href });
@@ -50,11 +47,11 @@ function SortableFavorite({ item, onRemove }: { item: FavoriteItem; onRemove: ()
   const isActive = pathname === item.href;
 
   return (
-    <div ref={setNodeRef} style={style} className={`group flex items-center h-[34px] px-4 ${isActive ? "bg-[#141414]" : "hover:bg-white/[0.03]"}`}>
+    <div ref={setNodeRef} style={style} className={`group flex items-center h-[38px] pl-[42px] pr-4 ${isActive ? "bg-[#141414]" : "hover:bg-white/[0.03]"}`}>
       <span {...attributes} {...listeners} className="mr-2 cursor-grab opacity-0 group-hover:opacity-50 transition-opacity">
-        <GripVertical size={11} className="text-white/40" />
+        <GripVertical size={12} className="text-white/40" />
       </span>
-      <Link href={item.href} className={`flex-1 text-[13px] ${isActive ? "text-[#ff7200] font-medium" : "text-[#b9b9b9] hover:text-white"}`}>
+      <Link href={item.href} className={`flex-1 text-[14px] ${isActive ? "text-[#ff7200] font-medium" : "text-[#b9b9b9] hover:text-white"}`}>
         {item.labelKey}
       </Link>
       <button onClick={onRemove} className="opacity-0 group-hover:opacity-100 text-white/30 hover:text-red-400 transition-opacity">
@@ -64,19 +61,18 @@ function SortableFavorite({ item, onRemove }: { item: FavoriteItem; onRemove: ()
   );
 }
 
-// ─── Favorites Zone ──────────────────────────────────────────────────────────
 function FavoritesZone({ items, onRemove }: { items: FavoriteItem[]; onRemove: (href: string) => void }) {
   const { setNodeRef, isOver } = useDroppable({ id: "favorites-zone" });
 
   return (
-    <div ref={setNodeRef} className={`border-b border-white/[0.06] transition-colors ${isOver ? "bg-[#ff7200]/[0.04] border-[#ff7200]/30" : ""}`}
-      style={{ padding: items.length > 0 ? "8px 0 6px" : "10px 0" }}>
-      <div className="flex items-center h-[24px] px-4 mb-1">
-        <Star size={11} className="text-[#ff7200]/80 mr-2" />
-        <span className="text-[10px] font-semibold tracking-[0.08em] uppercase text-white/40">Favoriler</span>
+    <div ref={setNodeRef} className={`border-b border-white/[0.06] transition-colors ${isOver ? "bg-[#ff7200]/[0.04]" : ""}`}
+      style={{ padding: "10px 0" }}>
+      <div className="flex items-center h-[38px] px-4 gap-2">
+        <Star size={16} className="text-[#ff7200]/80" />
+        <span className="text-[14px] font-medium text-white/50">Favoriler</span>
       </div>
       {items.length === 0 && (
-        <div className={`mx-4 py-2 border border-dashed rounded text-center text-[11px] transition-colors ${isOver ? "border-[#ff7200]/50 text-[#ff7200]/80" : "border-white/10 text-white/20"}`}>
+        <div className={`mx-4 py-3 border border-dashed rounded text-center text-[13px] transition-colors ${isOver ? "border-[#ff7200]/50 text-[#ff7200]/80" : "border-white/10 text-white/25"}`}>
           Sürükleyip favorilere ekle
         </div>
       )}
@@ -89,7 +85,6 @@ function FavoritesZone({ items, onRemove }: { items: FavoriteItem[]; onRemove: (
   );
 }
 
-// ─── Main Sidebar ────────────────────────────────────────────────────────────
 export function Sidebar() {
   const pathname = usePathname();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ signallab: true, finsumy: false });
@@ -134,10 +129,7 @@ export function Sidebar() {
           <div className="w-7 h-7 rounded-md bg-[#ff7200] flex items-center justify-center">
             <span className="text-white text-sm font-bold">O</span>
           </div>
-          <div>
-            <div className="text-[13px] font-semibold text-white/90">One-Stop-Fin</div>
-            <div className="text-[10px] text-white/30">Finance Terminal</div>
-          </div>
+          <div className="text-[14px] font-semibold text-white/90">One-Stop-Fin</div>
         </div>
 
         {/* Home */}
@@ -150,7 +142,7 @@ export function Sidebar() {
         {/* Favorites */}
         <FavoritesZone items={favorites} onRemove={removeFav} />
 
-        {/* Modules */}
+        {/* Modules - only implemented */}
         <nav className="flex-1 py-2">
           {MODULE_REGISTRY.filter((m) => m.implemented).map((mod) => {
             const Icon = mod.icon;
@@ -158,13 +150,13 @@ export function Sidebar() {
             return (
               <div key={mod.id}>
                 <button onClick={() => toggle(mod.id)}
-                  className={`flex items-center w-full h-[42px] px-4 gap-3 transition-colors ${isExp ? "text-white" : "text-[#ccc] hover:bg-white/[0.03]"}`}>
+                  className={`flex items-center w-full h-[44px] px-4 gap-3 transition-colors ${isExp ? "text-white" : "text-[#ccc] hover:bg-white/[0.03]"}`}>
                   <Icon size={18} className={isExp ? "text-[#ff7200]" : ""} />
                   <span className="text-[14px] font-medium">{mod.id === "signallab" ? "SignalLab" : "FinSumy"}</span>
                   {isExp ? <ChevronDown size={14} className="ml-auto text-white/30" /> : <ChevronRight size={14} className="ml-auto text-white/30" />}
                 </button>
                 {isExp && (
-                  <div className="ml-4 border-l border-white/[0.06] bg-black/30 py-1">
+                  <div className="border-l border-white/[0.06] ml-4 bg-black/30 py-1">
                     {mod.items.map((item) => (
                       <DraggableSubItem key={item.href} href={item.href} label={t(item.labelKey)} />
                     ))}
@@ -173,26 +165,12 @@ export function Sidebar() {
               </div>
             );
           })}
-
-          {/* Future modules */}
-          <div className="mt-4 px-4 py-2">
-            <span className="text-[10px] font-semibold tracking-[0.08em] uppercase text-white/25">Yakında</span>
-          </div>
-          {MODULE_REGISTRY.filter((m) => !m.implemented).map((mod) => {
-            const Icon = mod.icon;
-            return (
-              <div key={mod.id} className="flex items-center h-[36px] px-4 gap-3 opacity-25">
-                <Icon size={16} />
-                <span className="text-[13px] text-white/60">{mod.id}</span>
-              </div>
-            );
-          })}
         </nav>
       </aside>
 
       <DragOverlay>
         {activeId && (
-          <div className="bg-[#141414] text-[#ff7200] px-3 py-1.5 text-[12px] font-medium rounded border border-[#ff7200]/20 shadow-xl">
+          <div className="bg-[#141414] text-[#ff7200] px-3 py-1.5 text-[13px] font-medium rounded border border-[#ff7200]/20 shadow-xl">
             {activeId.split("/").pop()}
           </div>
         )}
