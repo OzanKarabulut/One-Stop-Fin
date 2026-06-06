@@ -258,7 +258,7 @@ export default function CSPScreenerPage() {
 
           {/* Scan button */}
           <button onClick={handleScan} disabled={isLoading}
-            className="rounded bg-primary px-4 py-1.5 text-sm font-medium text-[#ff7200]-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2">
+            className="rounded bg-[#ff7200] px-4 py-1.5 text-sm font-medium text-white hover:bg-[#ff8c3a] disabled:opacity-50 flex items-center gap-2">
             {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <TrendingUp className="h-4 w-4" />}
             {isLoading ? "Taranıyor..." : "Tara"}
           </button>
@@ -323,7 +323,7 @@ export default function CSPScreenerPage() {
           {filteredGroups.map((group) => (
             <div key={group.ticker} className="rounded-lg border border-white/[0.08] bg-[#0b0b0c] overflow-hidden">
               {/* Group Header */}
-              <div className="flex items-center justify-between border-b border-white/[0.08] bg-muted/30 px-4 py-2">
+              <div className="flex items-center justify-between border-b border-white/[0.08] bg-white/5 px-4 py-2">
                 <div className="flex items-center gap-3">
                   <span className="text-sm font-bold text-white">{group.ticker}</span>
                   <span className="text-xs text-white/50">${group.spot.toFixed(2)}</span>
@@ -360,7 +360,7 @@ export default function CSPScreenerPage() {
                   </thead>
                   <tbody>
                     {group.strikes.map((s) => (
-                      <tr key={`${s.ticker}-${s.strike}`} className="border-b border-white/[0.08]/50 hover:bg-white/[0.03] transition-colors">
+                      <tr key={`${s.ticker}-${s.strike}`} className="border-b border-white/5 hover:bg-white/[0.03] transition-colors">
                         <td className="px-3 py-1.5 font-medium text-white">${s.strike.toFixed(1)}</td>
                         <td className="px-3 py-1.5 text-center"><span className={cn("font-bold", (s as any).cspScore >= 72 ? "text-emerald-400" : (s as any).cspScore >= 50 ? "text-yellow-400" : "text-red-400")}>{(s as any).cspScore ?? "—"}</span></td>
                         <td className="px-3 py-1.5 text-right text-white/50">{s.bid.toFixed(2)}</td>
@@ -430,7 +430,7 @@ export default function CSPScreenerPage() {
           {/* Basket Items */}
           <div className="space-y-1">
             {basket.map((item, idx) => (
-              <div key={item.id} className="flex items-center justify-between rounded border border-white/[0.08]/50 px-3 py-1.5 text-xs">
+              <div key={item.id} className="flex items-center justify-between rounded border border-white/5 px-3 py-1.5 text-xs">
                 <div className="flex items-center gap-3">
                   <span className="font-medium text-white">{item.ticker}</span>
                   <span className="text-white/50">${item.strike} P</span>
@@ -439,9 +439,9 @@ export default function CSPScreenerPage() {
                 <div className="flex items-center gap-3">
                   <span className="text-emerald-400">${item.premium.toFixed(0)}</span>
                   <div className="flex items-center gap-1">
-                    <button onClick={() => updateQty(idx, -1)} className="rounded p-0.5 hover:bg-muted"><Minus className="h-3 w-3" /></button>
+                    <button onClick={() => updateQty(idx, -1)} className="rounded p-0.5 hover:bg-white/10"><Minus className="h-3 w-3" /></button>
                     <span className="w-5 text-center font-medium">{item.qty}</span>
-                    <button onClick={() => updateQty(idx, 1)} className="rounded p-0.5 hover:bg-muted"><Plus className="h-3 w-3" /></button>
+                    <button onClick={() => updateQty(idx, 1)} className="rounded p-0.5 hover:bg-white/10"><Plus className="h-3 w-3" /></button>
                   </div>
                   <button onClick={() => removeFromBasket(idx)} className="text-white/50 hover:text-red-400"><Trash2 className="h-3 w-3" /></button>
                 </div>
@@ -471,7 +471,7 @@ export default function CSPScreenerPage() {
       {/* Empty state */}
       {!data && !isLoading && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <DollarSign className="h-12 w-12 text-white/50/30 mb-4" />
+          <DollarSign className="h-12 w-12 text-white/30 mb-4" />
           <p className="text-sm text-white/50">Watchlist ve vade seçip &quot;Tara&quot; butonuna basın</p>
         </div>
       )}

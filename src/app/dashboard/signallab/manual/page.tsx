@@ -65,26 +65,26 @@ export default function ManualAnalysisPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Manuel Analiz</h1>
-        <p className="text-sm text-muted-foreground">Custom legs → P&L, Monte Carlo, EV, Kelly, breakevens</p>
+        <p className="text-sm text-white/50">Custom legs → P&L, Monte Carlo, EV, Kelly, breakevens</p>
       </div>
 
       {/* Controls */}
       <div className="rounded-lg border border-border bg-card p-4 space-y-4">
         <div className="flex flex-wrap items-end gap-4">
           <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">Ticker</label>
+            <label className="text-xs font-medium text-white/50">Ticker</label>
             <input type="text" value={ticker} onChange={(e) => { setTicker(e.target.value); setSubmitted(false); }}
               className="w-24 rounded border border-border bg-background px-3 py-1.5 text-sm font-medium uppercase focus:outline-none focus:ring-1 focus:ring-ring" />
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">Vade</label>
+            <label className="text-xs font-medium text-white/50">Vade</label>
             <select value={expiry} onChange={(e) => { setExpiry(e.target.value); setSubmitted(false); }}
               className="rounded border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring">
               {fridays.map((f) => <option key={f.date} value={f.date}>{f.label}</option>)}
             </select>
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">Sermaye ($)</label>
+            <label className="text-xs font-medium text-white/50">Sermaye ($)</label>
             <input type="number" value={capital} onChange={(e) => { setCapital(Number(e.target.value)); setSubmitted(false); }}
               className="w-28 rounded border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring" />
           </div>
@@ -93,8 +93,8 @@ export default function ManualAnalysisPage() {
         {/* Legs */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">Legs</span>
-            <button onClick={addLeg} className="flex items-center gap-1 text-xs text-primary hover:text-primary/80">
+            <span className="text-xs font-medium text-white/50">Legs</span>
+            <button onClick={addLeg} className="flex items-center gap-1 text-xs text-[#ff7200] hover:text-[#ff7200]/80">
               <Plus className="h-3 w-3" /> Leg Ekle
             </button>
           </div>
@@ -116,7 +116,7 @@ export default function ManualAnalysisPage() {
                 placeholder="Fiyat" step="0.01" className="w-20 rounded border border-border bg-background px-2 py-1 text-xs" />
               <input type="number" value={leg.contracts} onChange={(e) => updateLeg(leg.id, "contracts", Number(e.target.value))}
                 placeholder="Adet" min={1} className="w-16 rounded border border-border bg-background px-2 py-1 text-xs" />
-              <button onClick={() => removeLeg(leg.id)} className="text-muted-foreground hover:text-destructive">
+              <button onClick={() => removeLeg(leg.id)} className="text-white/50 hover:text-red-400">
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             </div>
@@ -124,40 +124,40 @@ export default function ManualAnalysisPage() {
         </div>
 
         <button onClick={() => setSubmitted(true)} disabled={isLoading || legs.length === 0}
-          className="rounded bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2">
+          className="rounded bg-[#ff7200] px-4 py-1.5 text-sm font-medium text-white hover:bg-[#ff8c3a] disabled:opacity-50 flex items-center gap-2">
           {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Calculator className="h-4 w-4" />}
           Analiz Et
         </button>
       </div>
 
-      {error && <p className="text-sm text-destructive">{error.message}</p>}
+      {error && <p className="text-sm text-red-400">{error.message}</p>}
 
       {data && (
         <div className="space-y-4">
           {/* Results Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
             <div className="rounded-lg border border-border bg-card p-3 text-center">
-              <p className="text-[10px] text-muted-foreground">Net Prim</p>
+              <p className="text-[10px] text-white/50">Net Prim</p>
               <p className={cn("text-sm font-bold", data.netPremium >= 0 ? "text-emerald-400" : "text-red-400")}>${data.netPremium.toFixed(0)}</p>
             </div>
             <div className="rounded-lg border border-border bg-card p-3 text-center">
-              <p className="text-[10px] text-muted-foreground">Max Kâr</p>
+              <p className="text-[10px] text-white/50">Max Kâr</p>
               <p className="text-sm font-bold text-emerald-400">${data.maxProfit.toFixed(0)}</p>
             </div>
             <div className="rounded-lg border border-border bg-card p-3 text-center">
-              <p className="text-[10px] text-muted-foreground">Max Zarar</p>
+              <p className="text-[10px] text-white/50">Max Zarar</p>
               <p className="text-sm font-bold text-red-400">${data.maxLoss.toFixed(0)}</p>
             </div>
             <div className="rounded-lg border border-border bg-card p-3 text-center">
-              <p className="text-[10px] text-muted-foreground">Kazanma Olasılığı</p>
+              <p className="text-[10px] text-white/50">Kazanma Olasılığı</p>
               <p className="text-sm font-bold text-foreground">{data.mcProbability.toFixed(1)}%</p>
             </div>
             <div className="rounded-lg border border-border bg-card p-3 text-center">
-              <p className="text-[10px] text-muted-foreground">EV</p>
+              <p className="text-[10px] text-white/50">EV</p>
               <p className={cn("text-sm font-bold", data.ev >= 0 ? "text-emerald-400" : "text-red-400")}>${data.ev.toFixed(0)}</p>
             </div>
             <div className="rounded-lg border border-border bg-card p-3 text-center">
-              <p className="text-[10px] text-muted-foreground">Kelly%</p>
+              <p className="text-[10px] text-white/50">Kelly%</p>
               <p className="text-sm font-bold text-foreground">{data.kellyFraction.toFixed(1)}%</p>
             </div>
           </div>
@@ -165,19 +165,19 @@ export default function ManualAnalysisPage() {
           {/* Additional metrics */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="rounded-lg border border-border bg-card p-3 text-center">
-              <p className="text-[10px] text-muted-foreground">Vol Edge</p>
+              <p className="text-[10px] text-white/50">Vol Edge</p>
               <p className="text-sm font-bold text-yellow-400">{data.volEdge.toFixed(1)}%</p>
             </div>
             <div className="rounded-lg border border-border bg-card p-3 text-center">
-              <p className="text-[10px] text-muted-foreground">EV%</p>
+              <p className="text-[10px] text-white/50">EV%</p>
               <p className={cn("text-sm font-bold", data.evPct >= 0 ? "text-emerald-400" : "text-red-400")}>{data.evPct.toFixed(1)}%</p>
             </div>
             <div className="rounded-lg border border-border bg-card p-3 text-center">
-              <p className="text-[10px] text-muted-foreground">Risk%</p>
+              <p className="text-[10px] text-white/50">Risk%</p>
               <p className="text-sm font-bold text-red-400">{data.riskPct.toFixed(1)}%</p>
             </div>
             <div className="rounded-lg border border-border bg-card p-3 text-center">
-              <p className="text-[10px] text-muted-foreground">Breakevens</p>
+              <p className="text-[10px] text-white/50">Breakevens</p>
               <p className="text-sm font-bold text-foreground">{data.breakevens.map((b) => `$${b.toFixed(1)}`).join(", ") || "—"}</p>
             </div>
           </div>
@@ -185,7 +185,7 @@ export default function ManualAnalysisPage() {
           {/* P&L Chart */}
           {data.scenarios.length > 0 && (
             <div className="rounded-lg border border-border bg-card p-4">
-              <h3 className="text-xs font-bold text-muted-foreground mb-3">P&L Grafiği</h3>
+              <h3 className="text-xs font-bold text-white/50 mb-3">P&L Grafiği</h3>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={data.scenarios} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
@@ -225,11 +225,11 @@ export default function ManualAnalysisPage() {
           {/* P&L Scenarios Table */}
           {data.scenarios.length > 0 && (
             <div className="rounded-lg border border-border bg-card p-4">
-              <h3 className="text-xs font-bold text-muted-foreground mb-2">Fiyat Senaryoları</h3>
+              <h3 className="text-xs font-bold text-white/50 mb-2">Fiyat Senaryoları</h3>
               <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-7 gap-2">
                 {data.scenarios.filter((_, i) => i % 3 === 0).map((s) => (
                   <div key={s.price} className="text-center">
-                    <p className="text-[10px] text-muted-foreground">${s.price.toFixed(0)}</p>
+                    <p className="text-[10px] text-white/50">${s.price.toFixed(0)}</p>
                     <p className={cn("text-xs font-bold", s.pnl >= 0 ? "text-emerald-400" : "text-red-400")}>${s.pnl.toFixed(0)}</p>
                   </div>
                 ))}
@@ -240,11 +240,11 @@ export default function ManualAnalysisPage() {
           {/* Time Scenarios */}
           {data.timeScenarios && data.timeScenarios.length > 0 && (
             <div className="rounded-lg border border-border bg-card p-4">
-              <h3 className="text-xs font-bold text-muted-foreground mb-3">Zaman Senaryoları</h3>
+              <h3 className="text-xs font-bold text-white/50 mb-3">Zaman Senaryoları</h3>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="border-b border-border text-muted-foreground">
+                    <tr className="border-b border-border text-white/50">
                       <th className="px-2 py-1.5 text-left font-medium">Gün</th>
                       {data.timeScenarios[0]?.scenarios.map((s, i) => (
                         <th key={i} className="px-2 py-1.5 text-right font-medium">

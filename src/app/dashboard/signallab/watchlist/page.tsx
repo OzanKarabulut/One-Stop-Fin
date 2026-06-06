@@ -44,7 +44,7 @@ export default function WatchlistPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-foreground">İzleme Listesi</h1>
-        <p className="text-sm text-muted-foreground">Fiyat, değişim, IV Rank, HV, trend ve RSI</p>
+        <p className="text-sm text-white/50">Fiyat, değişim, IV Rank, HV, trend ve RSI</p>
       </div>
 
       {/* Add ticker */}
@@ -52,16 +52,16 @@ export default function WatchlistPage() {
         <input type="text" value={newTicker} onChange={(e) => setNewTicker(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && addTicker()}
           placeholder="Ticker ekle (ör. COIN)"
-          className="rounded border border-border bg-background px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring" />
+          className="rounded border border-border bg-background px-3 py-1.5 text-sm text-foreground placeholder:text-white/50 focus:outline-none focus:ring-1 focus:ring-ring" />
         <button onClick={addTicker}
-          className="rounded bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+          className="rounded bg-[#ff7200] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#ff8c3a]">
           Ekle
         </button>
       </div>
 
       {isLoading && (
         <div className="flex items-center justify-center py-10">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <Loader2 className="h-6 w-6 animate-spin text-white/50" />
         </div>
       )}
 
@@ -69,7 +69,7 @@ export default function WatchlistPage() {
         <div className="rounded-lg border border-border bg-card overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border text-muted-foreground text-xs">
+              <tr className="border-b border-border text-white/50 text-xs">
                 <th className="px-4 py-3 text-left font-medium">Ticker</th>
                 <th className="px-4 py-3 text-right font-medium">Fiyat</th>
                 <th className="px-4 py-3 text-right font-medium">Değişim%</th>
@@ -82,18 +82,18 @@ export default function WatchlistPage() {
             </thead>
             <tbody>
               {data.map((item) => (
-                <tr key={item.symbol} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                <tr key={item.symbol} className="border-b border-border/50 hover:bg-white/10/20 transition-colors">
                   <td className="px-4 py-2.5 font-medium text-foreground">{item.symbol}</td>
                   <td className="px-4 py-2.5 text-right text-foreground">${item.price.toFixed(2)}</td>
                   <td className={cn("px-4 py-2.5 text-right font-medium", item.changePct >= 0 ? "text-emerald-400" : "text-red-400")}>
                     {item.changePct >= 0 ? "+" : ""}{item.changePct.toFixed(2)}%
                   </td>
                   <td className="px-4 py-2.5 text-right">
-                    <span className={cn("font-medium", item.ivRank > 60 ? "text-emerald-400" : item.ivRank > 30 ? "text-yellow-400" : "text-muted-foreground")}>
+                    <span className={cn("font-medium", item.ivRank > 60 ? "text-emerald-400" : item.ivRank > 30 ? "text-yellow-400" : "text-white/50")}>
                       {item.ivRank.toFixed(0)}%
                     </span>
                   </td>
-                  <td className="px-4 py-2.5 text-right text-muted-foreground">{item.hv.toFixed(0)}%</td>
+                  <td className="px-4 py-2.5 text-right text-white/50">{item.hv.toFixed(0)}%</td>
                   <td className="px-4 py-2.5 text-center">
                     <span className={cn("rounded px-2 py-0.5 text-xs font-medium",
                       item.trend === "bullish" ? "bg-emerald-500/20 text-emerald-400" :
@@ -103,12 +103,12 @@ export default function WatchlistPage() {
                     </span>
                   </td>
                   <td className={cn("px-4 py-2.5 text-right font-medium",
-                    item.rsi > 70 ? "text-red-400" : item.rsi < 30 ? "text-emerald-400" : "text-muted-foreground")}>
+                    item.rsi > 70 ? "text-red-400" : item.rsi < 30 ? "text-emerald-400" : "text-white/50")}>
                     {item.rsi.toFixed(0)}
                   </td>
                   <td className="px-4 py-2.5 text-center">
                     <button onClick={() => removeTicker(item.symbol)}
-                      className="text-muted-foreground hover:text-yellow-400 transition-colors">
+                      className="text-white/50 hover:text-yellow-400 transition-colors">
                       <Star className="h-4 w-4 fill-current" />
                     </button>
                   </td>
