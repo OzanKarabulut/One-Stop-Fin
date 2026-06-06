@@ -9,7 +9,7 @@ import { greeks as bsGreeks, realWorldProbability } from "./black-scholes";
 
 // ─── Retry helper ────────────────────────────────────────────────────────────
 async function sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
-async function withRetry<T>(fn: () => Promise<T>, retries = 3, baseDelay = 2000): Promise<T> {
+async function withRetry<T>(fn: () => Promise<T>, retries = 5, baseDelay = 5000): Promise<T> {
   for (let i = 0; i < retries; i++) {
     try { return await fn(); } catch (e) {
       if (i === retries - 1) throw e;
@@ -125,7 +125,7 @@ let crumbFetchedAt = 0;
 
 async function ensureCrumb(): Promise<{ crumb: string; cookies: string }> {
   // Return cached crumb if fresh (< 50 min)
-  if (crumb && crumbCookies && Date.now() - crumbFetchedAt < 3000 * 1000) {
+  if (crumb && crumbCookies && Date.now() - crumbFetchedAt < 14400 * 1000) {
     return { crumb, cookies: crumbCookies };
   }
 
