@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { Home, ChevronDown, ChevronRight, Star, GripVertical, X } from "lucide-react";
 import { MODULE_REGISTRY } from "@/lib/modules/registry";
 import { useState, useEffect } from "react";
-import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, pointerWithin, useDroppable, useDraggable } from "@dnd-kit/core";
+import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, closestCenter, useDroppable, useDraggable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { trpc } from "@/lib/trpc/client";
@@ -29,11 +29,11 @@ function DraggableSubItem({ href, label }: { href: string; label: string }) {
   const isActive = pathname === href;
 
   return (
-    <div ref={setNodeRef} className={`group flex items-center h-[38px] pl-[42px] pr-4 transition-colors ${isActive ? "bg-[#141414] border-l-2 border-[#ff7200]" : "hover:bg-white/[0.03] border-l-2 border-transparent"} ${isDragging ? "opacity-30" : ""}`}>
-      <span {...attributes} {...listeners} className="mr-2 cursor-grab opacity-0 group-hover:opacity-50 hover:!opacity-100 transition-opacity flex-shrink-0">
-        <GripVertical size={12} />
-      </span>
-      <Link href={href} className={`text-[14px] ${isActive ? "text-[#ff7200] font-medium" : "text-[#b9b9b9] hover:text-white"}`}>
+    <div ref={setNodeRef} {...attributes} {...listeners}
+      className={`group flex items-center h-[38px] pl-[42px] pr-4 cursor-grab transition-colors ${isActive ? "bg-[#141414] border-l-2 border-[#ff7200]" : "hover:bg-white/[0.03] border-l-2 border-transparent"} ${isDragging ? "opacity-30" : ""}`}>
+      <GripVertical size={12} className="mr-2 opacity-0 group-hover:opacity-40 flex-shrink-0" />
+      <Link href={href} onClick={(e) => { if (isDragging) e.preventDefault(); }}
+        className={`text-[14px] ${isActive ? "text-[#ff7200] font-medium" : "text-[#b9b9b9] hover:text-white"}`}>
         {label}
       </Link>
     </div>
@@ -87,7 +87,7 @@ function FavoritesZone({ items, onRemove }: { items: FavoriteItem[]; onRemove: (
 
 export function Sidebar() {
   const pathname = usePathname();
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({ signallab: true, finsumy: false });
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({ signallab: true, finsumy: true });
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -121,7 +121,7 @@ export function Sidebar() {
   };
 
   return (
-    <DndContext collisionDetection={pointerWithin} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+    <DndContext collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <aside className="w-[264px] h-screen bg-[#060606] border-r border-white/[0.08] flex flex-col overflow-y-auto shrink-0">
 
         {/* Brand */}
