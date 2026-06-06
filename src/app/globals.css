@@ -15,4 +15,16 @@
   --down: #dc2626;
   --text-primary: #1a1d21;
   --text-muted: #6b7280;
+
+  /* Aliases for component compatibility */
+  --foreground: var(--text-primary);
+  --muted-foreground: var(--text-muted);
+  --border: var(--card-border);
+  --card: var(--card-bg);
+  --background: var(--page-bg);
+  --primary: var(--accent);
+  --primary-foreground: #ffffff;
+  --destructive: var(--down);
+  --muted: #f3f4f6;
+  --ring: var(--accent);
 }

@@ -1,60 +1,67 @@
 "use client";
 
+import { useState } from "react";
 import { trpc } from "@/lib/trpc/client";
-import { Card } from "@/components/ui/Card";
+import { cn } from "@/lib/utils";
+
+type Period = "24h" | "7d" | "30d";
 
 export default function SignalLeadersPage() {
-  const { data: leaders, isLoading: loadingLeaders } = trpc.signal.leaders.useQuery();
-  const { data: heatmap, isLoading: loadingHeatmap } = trpc.signal.heatmap.useQuery();
+  const [period, setPeriod] = useState<Period>("7d");
+  const { data, isLoading } = trpc.signal.leaders.useQuery({ period });
 
   return (
-    <div>
-      <h1 className="text-lg font-semibold text-text-primary mb-4">Sinyal Liderleri</h1>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div>
-          <h2 className="text-sm font-semibold mb-2">En Güçlü Sinyaller</h2>
-          {loadingLeaders && <p className="text-xs text-text-muted">Yükleniyor...</p>}
-          {leaders && leaders.length === 0 && <p className="text-xs text-text-muted">Sinyal yok.</p>}
-          {leaders && leaders.length > 0 && (
-            <div className="space-y-2">
-              {leaders.map((s) => (
-                <Card key={s.id} className="flex items-center justify-between">
-                  <div>
-                    <span className="font-medium text-sm">{s.ticker}</span>
-                    <span className="ml-2 text-xs text-text-muted">{s.sources} kaynak</span>
-                  </div>
-                  <span className={`text-xs font-medium ${s.score > 0 ? "text-up" : s.score < 0 ? "text-down" : "text-text-muted"}`}>
-                    {s.signal} ({s.score.toFixed(2)})
-                  </span>
-                </Card>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div>
-          <h2 className="text-sm font-semibold mb-2">Isı Haritası</h2>
-          {loadingHeatmap && <p className="text-xs text-text-muted">Yükleniyor...</p>}
-          {heatmap && heatmap.length === 0 && <p className="text-xs text-text-muted">Veri yok.</p>}
-          {heatmap && heatmap.length > 0 && (
-            <div className="grid grid-cols-3 gap-2">
-              {heatmap.map((h) => (
-                <div
-                  key={h.ticker}
-                  className={`p-2 rounded text-center text-xs font-medium ${
-                    h.avgScore > 0.3 ? "bg-up/20 text-up" :
-                    h.avgScore < -0.3 ? "bg-down/20 text-down" : "bg-gray-100 text-text-muted"
-                  }`}
-                >
-                  <div>{h.ticker}</div>
-                  <div className="text-[10px]">{h.avgScore.toFixed(2)}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-text-primary">Sinyal Liderleri</h1>
+        <p className="text-sm text-text-muted">En güçlü yükseliş ve düşüş sinyalleri</p>
       </div>
+
+      <div className="flex gap-2">
+        {(["24h", "7d", "30d"] as Period[]).map((p) => (
+          <button key={p} onClick={() => setPeriod(p)} className={cn("px-3 py-1.5 text-sm rounded", period === p ? "bg-accent text-white" : "bg-card-bg border border-card-border text-text-primary")}>{p}</button>
+        ))}
+      </div>
+
+      {isLoading && <div className="text-center py-10 text-text-muted">Yükleniyor...</div>}
+
+      {data && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="rounded-lg border border-card-border bg-card-bg p-4">
+            <h2 className="font-bold text-up mb-3">📈 Yükseliş Sinyalleri</h2>
+            {data.bullish.length > 0 ? (
+              <div className="space-y-2">
+                {data.bullish.map((s) => (
+                  <div key={s.ticker} className="flex items-center justify-between py-1.5 border-b border-card-border/50 last:border-0">
+                    <span className="font-medium text-sm text-text-primary">{s.ticker}</span>
+                    <div className="text-right">
+                      <span className="text-sm font-bold text-up">{(s.score * 100).toFixed(0)}%</span>
+                      <span className="text-xs text-text-muted ml-2">{s.sources} kaynak</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : <p className="text-sm text-text-muted">Veri bekleniyor...</p>}
+          </div>
+
+          <div className="rounded-lg border border-card-border bg-card-bg p-4">
+            <h2 className="font-bold text-down mb-3">📉 Düşüş Sinyalleri</h2>
+            {data.bearish.length > 0 ? (
+              <div className="space-y-2">
+                {data.bearish.map((s) => (
+                  <div key={s.ticker} className="flex items-center justify-between py-1.5 border-b border-card-border/50 last:border-0">
+                    <span className="font-medium text-sm text-text-primary">{s.ticker}</span>
+                    <div className="text-right">
+                      <span className="text-sm font-bold text-down">{(s.score * 100).toFixed(0)}%</span>
+                      <span className="text-xs text-text-muted ml-2">{s.sources} kaynak</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : <p className="text-sm text-text-muted">Veri bekleniyor...</p>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

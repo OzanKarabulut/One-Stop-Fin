@@ -8,22 +8,24 @@
     "detail": "Detay →",
     "comingSoon": "Yakında",
     "add": "Ekle",
-    "remove": "Kaldır",
-    "save": "Kaydet",
-    "cancel": "İptal"
+    "remove": "Kaldır"
   },
   "modules": {
-    "finsumy": "FinSumy",
-    "finsumy.overview": "Genel Bakış",
-    "finsumy.youtube": "YouTube Özetleri",
-    "finsumy.channels": "Kanallar",
-    "finsumy.signalLeaders": "Sinyal Liderleri",
-    "signallab": "SignalLab",
-    "signallab.csp": "CSP Tarayıcı",
-    "signallab.aiStrategy": "AI Strateji",
-    "signallab.manual": "Manuel Analiz",
-    "signallab.market": "Piyasa",
-    "signallab.watchlist": "İzleme Listesi",
+    "finsumy": {
+      "_label": "FinSumy",
+      "overview": "Genel Bakış",
+      "youtube": "YouTube Özetleri",
+      "channels": "Kanallar",
+      "signalLeaders": "Sinyal Liderleri"
+    },
+    "signallab": {
+      "_label": "SignalLab",
+      "csp": "CSP Tarayıcı",
+      "aiStrategy": "AI Strateji",
+      "manual": "Manuel Analiz",
+      "market": "Piyasa",
+      "watchlist": "İzleme Listesi"
+    },
     "newssumy": "NewsSumy",
     "edusumy": "EduSumy",
     "docsumy": "DocSumy",
@@ -43,7 +45,8 @@
     "aiStrategy": "AI Strateji",
     "manualAnalysis": "Manuel Analiz",
     "marketOverview": "Piyasa Genel Bakış",
-    "watchlist": "İzleme Listesi"
+    "watchlist": "İzleme Listesi",
+    "sectors": "Sektörler"
   },
   "finsumy": {
     "overview": "Genel Bakış",

@@ -2,65 +2,51 @@
 
 import { useState } from "react";
 import { trpc } from "@/lib/trpc/client";
-import { Card } from "@/components/ui/Card";
-import { Plus, Trash2 } from "lucide-react";
 
 export default function ChannelsPage() {
-  const utils = trpc.useUtils();
-  const { data, isLoading } = trpc.channel.list.useQuery();
-  const addMutation = trpc.channel.add.useMutation({ onSuccess: () => utils.channel.list.invalidate() });
-  const removeMutation = trpc.channel.remove.useMutation({ onSuccess: () => utils.channel.list.invalidate() });
-
   const [youtubeId, setYoutubeId] = useState("");
   const [name, setName] = useState("");
 
-  const handleAdd = () => {
-    if (!youtubeId.trim() || !name.trim()) return;
-    addMutation.mutate({ youtubeId: youtubeId.trim(), name: name.trim() });
-    setYoutubeId("");
-    setName("");
-  };
+  const utils = trpc.useUtils();
+  const { data: channels, isLoading } = trpc.channel.list.useQuery();
+  const addMutation = trpc.channel.add.useMutation({ onSuccess: () => { utils.channel.list.invalidate(); setYoutubeId(""); setName(""); } });
+  const removeMutation = trpc.channel.remove.useMutation({ onSuccess: () => utils.channel.list.invalidate() });
 
   return (
-    <div>
-      <h1 className="text-lg font-semibold text-text-primary mb-4">Kanallar</h1>
-      <Card className="mb-4">
-        <div className="flex flex-wrap gap-2">
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Kanal adı"
-            className="border border-card-border rounded px-2 py-1 text-sm flex-1 min-w-[120px]"
-          />
-          <input
-            value={youtubeId}
-            onChange={(e) => setYoutubeId(e.target.value)}
-            placeholder="YouTube Kanal ID"
-            className="border border-card-border rounded px-2 py-1 text-sm flex-1 min-w-[120px]"
-          />
-          <button onClick={handleAdd} className="bg-accent text-white px-3 py-1 rounded text-sm hover:bg-accent-hover flex items-center gap-1">
-            <Plus size={14} /> Ekle
-          </button>
-        </div>
-      </Card>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-text-primary">Kanallar</h1>
+        <p className="text-sm text-text-muted">YouTube kanallarını takip et — yeni videolar otomatik analiz edilir</p>
+      </div>
 
-      {isLoading && <p className="text-sm text-text-muted">Yükleniyor...</p>}
-      {data && data.length === 0 && <p className="text-sm text-text-muted">Henüz kanal eklenmemiş.</p>}
-      {data && data.length > 0 && (
+      {/* Add form */}
+      <div className="rounded-lg border border-card-border bg-card-bg p-4">
+        <h2 className="text-sm font-medium text-text-primary mb-3">Kaynak Ekle</h2>
+        <div className="flex gap-2 flex-wrap">
+          <input value={youtubeId} onChange={(e) => setYoutubeId(e.target.value)} placeholder="YouTube Channel ID" className="rounded border border-card-border px-3 py-1.5 text-sm text-text-primary placeholder:text-text-muted flex-1 min-w-[200px]" />
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Kanal adı" className="rounded border border-card-border px-3 py-1.5 text-sm text-text-primary placeholder:text-text-muted w-40" />
+          <button onClick={() => addMutation.mutate({ youtubeId, name })} disabled={!youtubeId || !name || addMutation.isLoading} className="rounded bg-accent px-4 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50">Ekle</button>
+        </div>
+        {addMutation.error && <p className="text-xs text-down mt-2">{addMutation.error.message}</p>}
+      </div>
+
+      {/* Channel list */}
+      {isLoading && <div className="text-center py-10 text-text-muted">Yükleniyor...</div>}
+      {channels && channels.length > 0 ? (
         <div className="space-y-2">
-          {data.map((ch) => (
-            <Card key={ch.id} className="flex items-center justify-between">
+          {channels.map((ch) => (
+            <div key={ch.id} className="rounded-lg border border-card-border bg-card-bg p-3 flex items-center justify-between">
               <div>
-                <span className="font-medium text-sm">{ch.name}</span>
-                <span className="ml-2 text-xs text-text-muted">{ch.youtubeId}</span>
+                <p className="text-sm font-medium text-text-primary">{ch.name}</p>
+                <p className="text-xs text-text-muted">{ch.youtubeId} • {ch._count.videos} video</p>
               </div>
-              <button onClick={() => removeMutation.mutate({ id: ch.id })} className="text-text-muted hover:text-down">
-                <Trash2 size={14} />
-              </button>
-            </Card>
+              <button onClick={() => removeMutation.mutate({ id: ch.id })} className="text-xs text-down hover:underline">Kaldır</button>
+            </div>
           ))}
         </div>
-      )}
+      ) : !isLoading ? (
+        <div className="text-center py-10 text-text-muted">Henüz kanal eklenmedi.</div>
+      ) : null}
     </div>
   );
 }

@@ -1,36 +1,163 @@
 "use client";
 
+import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc/client";
-import { Card } from "@/components/ui/Card";
+import { cn } from "@/lib/utils";
+import { Brain, Loader2, TrendingUp, TrendingDown, Minus } from "lucide-react";
+
+function generateFridays(): { date: string; label: string }[] {
+  const fridays: { date: string; label: string }[] = [];
+  const now = new Date();
+  for (let i = 1; i < 120 && fridays.length < 10; i++) {
+    const d = new Date(now.getTime() + i * 86400000);
+    if (d.getUTCDay() === 5) {
+      const dateStr = d.toISOString().split("T")[0];
+      const label = `${d.toLocaleDateString("tr-TR", { day: "numeric", month: "short" })} (${i}g)`;
+      fridays.push({ date: dateStr, label });
+    }
+  }
+  return fridays;
+}
 
 export default function AIStrategyPage() {
-  const { data, isLoading, error } = trpc.signallab.aiPick.useQuery();
+  const fridays = useMemo(() => generateFridays(), []);
+  const [ticker, setTicker] = useState("TSLA");
+  const [expiry, setExpiry] = useState(fridays[1]?.date ?? "");
+  const [submitted, setSubmitted] = useState(false);
+
+  const { data, isLoading, error } = trpc.signallab.aiPick.useQuery(
+    { ticker: ticker.toUpperCase(), expiry },
+    { enabled: submitted, refetchOnWindowFocus: false },
+  );
+
+  const handleSubmit = () => { setSubmitted(true); };
 
   return (
-    <div>
-      <h1 className="text-lg font-semibold text-text-primary mb-4">AI Strateji</h1>
-      {isLoading && <p className="text-sm text-text-muted">Yükleniyor...</p>}
-      {error && <p className="text-sm text-down">Hata: {error.message}</p>}
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-foreground">AI Strateji</h1>
+        <p className="text-sm text-muted-foreground">Ticker + vade seç → 7 strateji önerisi composite score ile sıralı</p>
+      </div>
+
+      {/* Input */}
+      <div className="rounded-lg border border-border bg-card p-4">
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Ticker</label>
+            <input type="text" value={ticker} onChange={(e) => { setTicker(e.target.value); setSubmitted(false); }}
+              className="w-28 rounded border border-border bg-background px-3 py-1.5 text-sm font-medium text-foreground uppercase focus:outline-none focus:ring-1 focus:ring-ring" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Vade</label>
+            <select value={expiry} onChange={(e) => { setExpiry(e.target.value); setSubmitted(false); }}
+              className="rounded border border-border bg-background px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring">
+              {fridays.map((f) => <option key={f.date} value={f.date}>{f.label}</option>)}
+            </select>
+          </div>
+          <button onClick={handleSubmit} disabled={isLoading || !ticker}
+            className="rounded bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2">
+            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
+            Analiz Et
+          </button>
+        </div>
+      </div>
+
+      {error && <p className="text-sm text-destructive">{error.message}</p>}
+
       {data && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {data.map((pick) => (
-            <Card key={pick.symbol}>
-              <div className="flex items-center justify-between">
-                <span className="font-medium text-sm">{pick.symbol}</span>
-                <span className={`text-xs px-2 py-0.5 rounded ${
-                  pick.signal.includes("BUY") ? "bg-up/10 text-up" : "bg-down/10 text-down"
-                }`}>
-                  {pick.signal}
-                </span>
+        <div className="space-y-6">
+          {/* Signals Summary */}
+          <div className="rounded-lg border border-border bg-card p-4">
+            <h2 className="text-sm font-bold text-foreground mb-3">Piyasa Sinyalleri — {data.ticker} (${data.price.toFixed(2)})</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+              <div className="text-center">
+                <p className="text-[10px] text-muted-foreground">IV Rank</p>
+                <p className={cn("text-sm font-bold", data.signals.ivRank > 50 ? "text-emerald-400" : "text-muted-foreground")}>{data.signals.ivRank.toFixed(0)}%</p>
               </div>
-              <div className="mt-2 flex items-center gap-3 text-xs text-text-muted">
-                <span>${pick.price}</span>
-                <span className={pick.change >= 0 ? "text-up" : "text-down"}>
-                  {pick.change >= 0 ? "+" : ""}{pick.change}%
-                </span>
+              <div className="text-center">
+                <p className="text-[10px] text-muted-foreground">Current IV</p>
+                <p className="text-sm font-bold text-yellow-400">{data.signals.currentIv.toFixed(0)}%</p>
               </div>
-            </Card>
-          ))}
+              <div className="text-center">
+                <p className="text-[10px] text-muted-foreground">HV</p>
+                <p className="text-sm font-bold text-muted-foreground">{data.signals.hv.toFixed(0)}%</p>
+              </div>
+              <div className="text-center">
+                <p className="text-[10px] text-muted-foreground">IV vs HV</p>
+                <p className="text-sm font-bold text-foreground">{data.signals.ivVsHv}</p>
+              </div>
+              <div className="text-center">
+                <p className="text-[10px] text-muted-foreground">Trend</p>
+                <p className="text-sm font-bold text-foreground flex items-center justify-center gap-1">
+                  {data.signals.trend === "bullish" ? <TrendingUp className="h-3 w-3 text-emerald-400" /> :
+                   data.signals.trend === "bearish" ? <TrendingDown className="h-3 w-3 text-red-400" /> :
+                   <Minus className="h-3 w-3" />}
+                  {data.signals.trend}
+                </p>
+              </div>
+              <div className="text-center">
+                <p className="text-[10px] text-muted-foreground">P/C Ratio</p>
+                <p className="text-sm font-bold text-foreground">{data.signals.pcRatio.toFixed(2)}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Strategies */}
+          {data.strategies.length > 0 ? (
+            <div className="space-y-3">
+              <h2 className="text-sm font-bold text-foreground">Strateji Önerileri ({data.strategies.length})</h2>
+              {data.strategies.map((s, idx) => (
+                <div key={s.name} className="rounded-lg border border-border bg-card p-4">
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-muted-foreground">#{idx + 1}</span>
+                        <h3 className="text-sm font-bold text-foreground">{s.name}</h3>
+                        <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-medium",
+                          s.type === "bullish" ? "bg-emerald-500/20 text-emerald-400" :
+                          s.type === "bearish" ? "bg-red-500/20 text-red-400" :
+                          "bg-blue-500/20 text-blue-400")}>{s.type}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">{s.description}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-2xl font-bold text-foreground">{s.compositeScore.toFixed(0)}</p>
+                      <p className="text-[10px] text-muted-foreground">Score</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-3">
+                    <div className="rounded border border-border/50 p-2 text-center">
+                      <p className="text-[10px] text-muted-foreground">Olasılık</p>
+                      <p className="text-xs font-bold text-emerald-400">{s.probability.toFixed(0)}%</p>
+                    </div>
+                    <div className="rounded border border-border/50 p-2 text-center">
+                      <p className="text-[10px] text-muted-foreground">Max Kâr</p>
+                      <p className="text-xs font-bold text-emerald-400">${s.maxProfit.toFixed(0)}</p>
+                    </div>
+                    <div className="rounded border border-border/50 p-2 text-center">
+                      <p className="text-[10px] text-muted-foreground">Max Zarar</p>
+                      <p className="text-xs font-bold text-red-400">${s.maxLoss.toFixed(0)}</p>
+                    </div>
+                    <div className="rounded border border-border/50 p-2 text-center">
+                      <p className="text-[10px] text-muted-foreground">EV</p>
+                      <p className={cn("text-xs font-bold", s.ev >= 0 ? "text-emerald-400" : "text-red-400")}>${s.ev.toFixed(0)}</p>
+                    </div>
+                    <div className="rounded border border-border/50 p-2 text-center">
+                      <p className="text-[10px] text-muted-foreground">Vol Edge</p>
+                      <p className="text-xs font-bold text-yellow-400">{s.volEdge.toFixed(0)}%</p>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-muted-foreground italic">{s.why}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-border bg-card p-6 text-center">
+              <p className="text-sm text-muted-foreground">{data.debugInfo.reason || "Strateji bulunamadı"}</p>
+            </div>
+          )}
         </div>
       )}
     </div>

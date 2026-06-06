@@ -4,12 +4,12 @@ import { db } from "@/lib/db";
 
 export const videoRouter = router({
   list: publicProcedure
-    .input(z.object({ limit: z.number().default(20) }))
+    .input(z.object({ limit: z.number().default(20) }).optional())
     .query(({ input }) =>
       db.video.findMany({
         where: { processed: true },
         orderBy: { publishedAt: "desc" },
-        take: input.limit,
+        take: input?.limit ?? 20,
         include: { channel: true, keyPoints: true, stockMentions: true },
       })
     ),
@@ -31,4 +31,11 @@ export const videoRouter = router({
         include: { channel: true, keyPoints: true, stockMentions: true },
       })
     ),
+
+  getTranscript: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ input }) => {
+      const video = await db.video.findUnique({ where: { id: input.id }, select: { transcript: true } });
+      return video?.transcript ?? null;
+    }),
 });

@@ -1,36 +1,12 @@
-import { PrismaClient } from "@prisma/client";
+import { db } from "@/lib/db";
 
-export interface StockMentionData {
-  ticker: string;
-  sentiment: string;
-  score: number;
-  reasoning: string;
-}
-
-export async function analyzeInvestments(
-  db: PrismaClient,
-  videoId: string,
-  transcript: string
-): Promise<StockMentionData[]> {
-  // Detect stock tickers in transcript (simplified pattern matching)
-  const tickerPattern = /\b([A-Z]{2,5})\b/g;
-  const knownTickers = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "AMD", "INTC", "NFLX", "DIS", "BA", "JPM", "V", "MA"];
-  const matches = transcript.match(tickerPattern) || [];
-  const mentioned = Array.from(new Set(matches)).filter((t) => knownTickers.includes(t));
-
-  const results: StockMentionData[] = mentioned.map((ticker) => ({
-    ticker,
-    sentiment: "neutral",
-    score: 0,
-    reasoning: "Videoda bahsedildi",
-  }));
-
-  // Save to DB
-  for (const mention of results) {
+export async function analyzeInvestments(videoId: string, transcript: string) {
+  const tickers = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA"];
+  const mentioned = tickers.filter((t) => transcript.includes(t));
+  for (const ticker of mentioned) {
     await db.stockMention.create({
-      data: { videoId, ...mention },
+      data: { videoId, ticker, sentiment: "neutral", score: 0, reasoning: "Videoda bahsedildi" },
     });
   }
-
-  return results;
+  return mentioned;
 }

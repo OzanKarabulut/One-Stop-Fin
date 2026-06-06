@@ -1,61 +1,121 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc/client";
-import { Card } from "@/components/ui/Card";
-import { Plus, Trash2 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Loader2, Star } from "lucide-react";
+
+const DEFAULT_TICKERS = ["TSLA", "NVDA", "AMD", "AAPL", "META", "GOOGL", "MSFT", "AMZN", "SPY", "QQQ"];
 
 export default function WatchlistPage() {
-  const utils = trpc.useUtils();
-  const { data, isLoading } = trpc.watchlist.list.useQuery();
-  const addMutation = trpc.watchlist.add.useMutation({ onSuccess: () => utils.watchlist.list.invalidate() });
-  const removeMutation = trpc.watchlist.remove.useMutation({ onSuccess: () => utils.watchlist.list.invalidate() });
-  const [ticker, setTicker] = useState("");
+  const [tickers, setTickers] = useState<string[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("signallab_watchlist_tickers");
+        if (saved) return JSON.parse(saved);
+      } catch { /* ignore */ }
+    }
+    return DEFAULT_TICKERS;
+  });
+  const [newTicker, setNewTicker] = useState("");
 
-  const handleAdd = () => {
-    if (!ticker.trim()) return;
-    addMutation.mutate({ ticker: ticker.trim() });
-    setTicker("");
+  useEffect(() => {
+    localStorage.setItem("signallab_watchlist_tickers", JSON.stringify(tickers));
+  }, [tickers]);
+
+  const { data, isLoading } = trpc.signallab.watchlist.useQuery(
+    { tickers },
+    { refetchInterval: 120000 },
+  );
+
+  const addTicker = () => {
+    const t = newTicker.trim().toUpperCase();
+    if (t && !tickers.includes(t)) {
+      setTickers([...tickers, t]);
+      setNewTicker("");
+    }
+  };
+
+  const removeTicker = (symbol: string) => {
+    setTickers(tickers.filter((t) => t !== symbol));
   };
 
   return (
-    <div>
-      <h1 className="text-lg font-semibold text-text-primary mb-4">İzleme Listesi</h1>
-      <Card className="mb-4">
-        <div className="flex gap-2">
-          <input
-            value={ticker}
-            onChange={(e) => setTicker(e.target.value.toUpperCase())}
-            placeholder="Sembol ekle..."
-            className="border border-card-border rounded px-2 py-1 text-sm flex-1"
-            onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-          />
-          <button onClick={handleAdd} className="bg-accent text-white px-3 py-1 rounded text-sm hover:bg-accent-hover flex items-center gap-1">
-            <Plus size={14} /> Ekle
-          </button>
-        </div>
-      </Card>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-foreground">İzleme Listesi</h1>
+        <p className="text-sm text-muted-foreground">Fiyat, değişim, IV Rank, HV, trend ve RSI</p>
+      </div>
 
-      {isLoading && <p className="text-sm text-text-muted">Yükleniyor...</p>}
-      {data && data.length === 0 && <p className="text-sm text-text-muted">İzleme listesi boş.</p>}
+      {/* Add ticker */}
+      <div className="flex gap-2">
+        <input type="text" value={newTicker} onChange={(e) => setNewTicker(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && addTicker()}
+          placeholder="Ticker ekle (ör. COIN)"
+          className="rounded border border-border bg-background px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring" />
+        <button onClick={addTicker}
+          className="rounded bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+          Ekle
+        </button>
+      </div>
+
+      {isLoading && (
+        <div className="flex items-center justify-center py-10">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      )}
+
       {data && data.length > 0 && (
-        <div className="space-y-2">
-          {data.map((item) => (
-            <Card key={item.ticker} className="flex items-center justify-between">
-              <div>
-                <span className="font-medium text-sm">{item.ticker}</span>
-                {item.price && <span className="ml-3 text-sm text-text-muted">${item.price.toFixed(2)}</span>}
-                {item.change !== undefined && item.change !== null && (
-                  <span className={`ml-2 text-xs ${item.change >= 0 ? "text-up" : "text-down"}`}>
-                    {item.change >= 0 ? "+" : ""}{item.change.toFixed(2)}%
-                  </span>
-                )}
-              </div>
-              <button onClick={() => removeMutation.mutate({ ticker: item.ticker })} className="text-text-muted hover:text-down">
-                <Trash2 size={14} />
-              </button>
-            </Card>
-          ))}
+        <div className="rounded-lg border border-border bg-card overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-muted-foreground text-xs">
+                <th className="px-4 py-3 text-left font-medium">Ticker</th>
+                <th className="px-4 py-3 text-right font-medium">Fiyat</th>
+                <th className="px-4 py-3 text-right font-medium">Değişim%</th>
+                <th className="px-4 py-3 text-right font-medium">IV Rank</th>
+                <th className="px-4 py-3 text-right font-medium">HV%</th>
+                <th className="px-4 py-3 text-center font-medium">Trend</th>
+                <th className="px-4 py-3 text-right font-medium">RSI</th>
+                <th className="px-4 py-3 text-center font-medium"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((item) => (
+                <tr key={item.symbol} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                  <td className="px-4 py-2.5 font-medium text-foreground">{item.symbol}</td>
+                  <td className="px-4 py-2.5 text-right text-foreground">${item.price.toFixed(2)}</td>
+                  <td className={cn("px-4 py-2.5 text-right font-medium", item.changePct >= 0 ? "text-emerald-400" : "text-red-400")}>
+                    {item.changePct >= 0 ? "+" : ""}{item.changePct.toFixed(2)}%
+                  </td>
+                  <td className="px-4 py-2.5 text-right">
+                    <span className={cn("font-medium", item.ivRank > 60 ? "text-emerald-400" : item.ivRank > 30 ? "text-yellow-400" : "text-muted-foreground")}>
+                      {item.ivRank.toFixed(0)}%
+                    </span>
+                  </td>
+                  <td className="px-4 py-2.5 text-right text-muted-foreground">{item.hv.toFixed(0)}%</td>
+                  <td className="px-4 py-2.5 text-center">
+                    <span className={cn("rounded px-2 py-0.5 text-xs font-medium",
+                      item.trend === "bullish" ? "bg-emerald-500/20 text-emerald-400" :
+                      item.trend === "bearish" ? "bg-red-500/20 text-red-400" :
+                      "bg-zinc-500/20 text-zinc-400")}>
+                      {item.trend === "bullish" ? "📈" : item.trend === "bearish" ? "📉" : "↔️"} {item.trend}
+                    </span>
+                  </td>
+                  <td className={cn("px-4 py-2.5 text-right font-medium",
+                    item.rsi > 70 ? "text-red-400" : item.rsi < 30 ? "text-emerald-400" : "text-muted-foreground")}>
+                    {item.rsi.toFixed(0)}
+                  </td>
+                  <td className="px-4 py-2.5 text-center">
+                    <button onClick={() => removeTicker(item.symbol)}
+                      className="text-muted-foreground hover:text-yellow-400 transition-colors">
+                      <Star className="h-4 w-4 fill-current" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

@@ -1,8 +1,2 @@
-// Ozan'ın kişisel ticker listesi — CSP Tarayıcı ve diğer modüller bu listeyi kullanır
-export const OZAN_TICKERS = [
-  "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA",
-  "AMD", "INTC", "NFLX", "DIS", "BA", "JPM", "V", "MA",
-  "KO", "PEP", "WMT", "COST", "HD", "LOW", "NKE",
-  "SOFI", "PLTR", "COIN", "MARA", "RIOT", "SQ", "PYPL",
-  "SPY", "QQQ", "IWM",
-];
+export const OZAN_TICKERS = "OSCR,EOSE,BMNR,IREN,CLS,MU,CRDO,SNDK,AAOI,PENG,GLW".split(",");
+export const ALL_TICKERS = "TSLA,NVDA,AMD,COIN,MSTR,PLTR,MARA,RIOT,GME,AMC,SOFI,RIVN,LCID,NIO,CVNA,SMCI,CRWD,NET,ANET,MRVL,POET,HOOD,RDDT,UBER,SHOP,SPY,QQQ,IWM,AAPL,META,GOOGL,MSFT,AMZN,AVGO".split(",");
