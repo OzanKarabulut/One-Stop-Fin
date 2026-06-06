@@ -47,6 +47,13 @@ interface BasketItem {
   collateral: number;
   premium: number;
   qty: number;
+  executablePremium?: number;
+  cspScore?: number;
+  actionLabel?: string;
+  companyQuality?: string;
+  delta?: number | null;
+  probabilityITM?: number | null;
+  riskNotes?: string[];
 }
 
 // ─── IV Class Badge ──────────────────────────────────────────────────────────
@@ -136,7 +143,7 @@ export default function CSPScreenerPage() {
   }, [data?.groups, hideK4, sortKey]);
 
   // Basket functions
-  const addToBasket = useCallback((contract: { ticker: string; strike: number; expiry: string; dte: number; mid: number; iv: number | null; collateral: number; premium: number }) => {
+  const addToBasket = useCallback((contract: { ticker: string; strike: number; expiry: string; dte: number; mid: number; iv: number | null; collateral: number; premium: number; executablePremium?: number; cspScore?: number; actionLabel?: string; companyQuality?: string; delta?: number | null; probabilityITM?: number | null; riskNotes?: string[] }) => {
     setBasket((prev) => {
       const id = `${contract.ticker}-${contract.strike}-${contract.expiry}`;
       const existing = prev.findIndex((b) => b.id === id);
@@ -270,6 +277,46 @@ export default function CSPScreenerPage() {
         </div>
       )}
 
+      {/* Top CSP Picks by IV Bucket */}
+      {data?.topPicks && (Object.values(data.topPicks).some((arr: unknown[]) => arr.length > 0)) && (
+        <div className="space-y-3">
+          <h2 className="text-sm font-bold text-foreground">🎯 Top CSP Picks</h2>
+          {(["70-100", "100-140", "140+"] as const).map((bucket) => {
+            const picks = (data.topPicks as Record<string, Array<{ ticker: string; strike: number; expiry: string; dte: number; mid: number; iv: number | null; collateral: number; premium: number; cspScore: number; executablePremiumAmount: number; delta: number | null; probabilityITM: number | null; expectedMoveBuffer: number | null; spreadPct: number | null; companyQuality: string; actionLabel: string; riskNotes: string[]; executablePremium: number }>>)[bucket];
+            if (!picks || picks.length === 0) return null;
+            return (
+              <div key={bucket}>
+                <h3 className="text-xs font-semibold text-muted-foreground mb-2">IV {bucket}%</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                  {picks.map((p, i) => (
+                    <div key={i} className="rounded border border-border bg-card p-3 text-xs space-y-1">
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-foreground">{p.ticker} {p.strike}P</span>
+                        <span className={cn("font-bold", p.cspScore >= 72 ? "text-emerald-400" : p.cspScore >= 50 ? "text-yellow-400" : "text-red-400")}>{p.cspScore}</span>
+                      </div>
+                      <div className="text-muted-foreground">{p.expiry} • {p.dte}g</div>
+                      <div className="grid grid-cols-2 gap-x-3 text-muted-foreground">
+                        <span>Premium: <b className="text-foreground">${p.executablePremiumAmount?.toFixed(0)}</b></span>
+                        <span>IV: <b className="text-foreground">{p.iv?.toFixed(0)}%</b></span>
+                        <span>Delta: {p.delta?.toFixed(2) ?? "—"}</span>
+                        <span>P(ITM): {p.probabilityITM?.toFixed(1) ?? "—"}%</span>
+                        <span>EM Buffer: {p.expectedMoveBuffer?.toFixed(1) ?? "—"}x</span>
+                        <span>Spread: {p.spreadPct?.toFixed(0) ?? "—"}%</span>
+                      </div>
+                      <div className="flex justify-between items-center pt-1">
+                        <span className={cn("text-[10px]", p.companyQuality === "A" ? "text-emerald-400" : p.companyQuality === "B" ? "text-blue-400" : "text-yellow-400")}>{p.companyQuality} • {p.actionLabel}</span>
+                        <button onClick={() => addToBasket(p)} className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded hover:bg-emerald-500/30">+ Basket</button>
+                      </div>
+                      {p.riskNotes?.length > 0 && <div className="text-[10px] text-orange-400/80">{p.riskNotes.slice(0, 2).join(" • ")}</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* Results Table */}
       {filteredGroups.length > 0 && (
         <div className="space-y-4">
@@ -296,6 +343,7 @@ export default function CSPScreenerPage() {
                   <thead>
                     <tr className="border-b border-border text-muted-foreground">
                       <th className="px-3 py-2 text-left font-medium">Strike</th>
+                      <th className="px-3 py-2 text-center font-medium">Score</th>
                       <th className="px-3 py-2 text-right font-medium">Bid</th>
                       <th className="px-3 py-2 text-right font-medium">Ask</th>
                       <th className="px-3 py-2 text-right font-medium">Mid</th>
@@ -314,6 +362,7 @@ export default function CSPScreenerPage() {
                     {group.strikes.map((s) => (
                       <tr key={`${s.ticker}-${s.strike}`} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
                         <td className="px-3 py-1.5 font-medium text-foreground">${s.strike.toFixed(1)}</td>
+                        <td className="px-3 py-1.5 text-center"><span className={cn("font-bold", (s as any).cspScore >= 72 ? "text-emerald-400" : (s as any).cspScore >= 50 ? "text-yellow-400" : "text-red-400")}>{(s as any).cspScore ?? "—"}</span></td>
                         <td className="px-3 py-1.5 text-right text-muted-foreground">{s.bid.toFixed(2)}</td>
                         <td className="px-3 py-1.5 text-right text-muted-foreground">{s.ask.toFixed(2)}</td>
                         <td className="px-3 py-1.5 text-right font-medium text-foreground">{s.mid.toFixed(2)}</td>

@@ -7,6 +7,7 @@ import { router, publicProcedure } from "../trpc";
 import * as yahoo from "../services/yahoo-finance";
 import * as math from "../services/math-engine";
 import { impliedVolBisection } from "../services/black-scholes";
+import { scoreCSPContract, type IVBucket } from "../services/csp-scoring";
 
 // ─── CSP Screener Constants ──────────────────────────────────────────────────
 
@@ -38,6 +39,32 @@ interface CSPContract {
   discount: number;
   volume: number;
   oi: number;
+  // Scoring fields
+  executablePremium: number;
+  executablePremiumAmount: number;
+  ivBucket: IVBucket;
+  delta: number | null;
+  probabilityITM: number | null;
+  expectedMove: number | null;
+  expectedMoveBuffer: number | null;
+  distanceToStrikePct: number;
+  breakevenDiscountPct: number;
+  spreadPct: number | null;
+  premiumYield: number;
+  premiumPerDay: number;
+  premiumEfficiency: number | null;
+  companyQuality: string;
+  companyComfortScore: number;
+  companyNote: string;
+  premiumScore: number;
+  safetyScore: number;
+  liquidityScore: number;
+  eventDataScore: number;
+  cspScore: number;
+  actionLabel: string;
+  riskNotes: string[];
+  rejected: boolean;
+  rejectReason: string | null;
 }
 
 interface CSPDiagnostic {
@@ -154,11 +181,20 @@ async function fetchCSPTicker(
       const discount = ((spot - breakeven) / spot) * 100;
       const moneyness = ((strike / spot) - 1) * 100;
 
+      const volume = typeof put.volume === "number" && Number.isFinite(put.volume) ? put.volume : -1;
+      const oiValue = oiKnown ? oi : -1;
+
+      const scoring = scoreCSPContract({
+        ticker, spot, strike, expiry: matchedExpiry, dte,
+        bid, ask, mid, iv, collateral, premium, yieldPct, annYield, breakeven, discount, volume, oi: oiValue,
+      });
+
       contracts.push({
         ticker, spot, strike, expiry: matchedExpiry, dte,
         bid, ask, mid, iv, ivSource, ivClass: cspClassify(iv),
         collateral, premium, yieldPct, annYield,
-        moneyness, breakeven, discount, volume: -1, oi: oiKnown ? oi : -1,
+        moneyness, breakeven, discount, volume, oi: oiValue,
+        ...scoring,
       });
     }
 
@@ -239,7 +275,14 @@ export const signallabRouter = router({
       const classDist = { 1: 0, 2: 0, 3: 0, 4: 0 };
       for (const c of allContracts) classDist[c.ivClass as 1|2|3|4]++;
 
-      return { groups, diagnostics: allDiags.sort((a, b) => a.ticker.localeCompare(b.ticker)), classDist, totalContracts: allContracts.length };
+      const sortByScore = (a: CSPContract, b: CSPContract) => b.cspScore - a.cspScore || b.executablePremiumAmount - a.executablePremiumAmount;
+      const topPicks = {
+        "70-100": allContracts.filter((c) => !c.rejected && c.ivBucket === "70-100").sort(sortByScore).slice(0, 3),
+        "100-140": allContracts.filter((c) => !c.rejected && c.ivBucket === "100-140").sort(sortByScore).slice(0, 3),
+        "140+": allContracts.filter((c) => !c.rejected && c.ivBucket === "140+").sort(sortByScore).slice(0, 3),
+      };
+
+      return { groups, topPicks, diagnostics: allDiags.sort((a, b) => a.ticker.localeCompare(b.ticker)), classDist, totalContracts: allContracts.length };
     }),
 
   // Market Overview
