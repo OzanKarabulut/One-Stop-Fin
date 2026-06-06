@@ -9,11 +9,12 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        background: "var(--background)",
+        foreground: "var(--foreground)",
         "sidebar-bg": "var(--sidebar-bg)",
         "sidebar-fg": "var(--sidebar-fg)",
         "sidebar-muted": "var(--sidebar-muted)",
         "sidebar-active-bg": "var(--sidebar-active-bg)",
-        "sidebar-sub-fg": "var(--sidebar-sub-fg)",
         "page-bg": "var(--page-bg)",
         "card-bg": "var(--card-bg)",
         "card-border": "var(--card-border)",

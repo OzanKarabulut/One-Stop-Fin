@@ -5,17 +5,13 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "One-Stop-Fin",
   description: "Kişisel finans karar-destek terminali",
-  themeColor: "#000000",
+  themeColor: "#050505",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="tr">
-      <head>
-        <meta name="theme-color" content="#000000" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black" />
-      </head>
-      <body style={{ background: "#000" }}>
+    <html lang="tr" suppressHydrationWarning>
+      <body className="min-h-screen bg-background text-foreground antialiased">
         <TRPCProvider>{children}</TRPCProvider>
       </body>
     </html>

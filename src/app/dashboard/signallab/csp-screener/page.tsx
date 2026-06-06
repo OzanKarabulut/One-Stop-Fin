@@ -184,27 +184,27 @@ export default function CSPScreenerPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">CSP Screener</h1>
-          <p className="text-sm text-muted-foreground">Cash-Secured Put tarama — IV klasman, getiri analizi, sepet yönetimi</p>
+          <h1 className="text-2xl font-bold text-white">CSP Opportunity Engine</h1>
+          <p className="text-sm text-white/50">High premium / low assignment risk cash-secured put scanner</p>
         </div>
         {data && (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-white/40">
             {data.totalContracts} kontrat | {data.groups.length} ticker
           </p>
         )}
       </div>
 
       {/* Controls */}
-      <div className="rounded-lg border border-border bg-card p-4">
+      <div className="rounded-lg border border-white/[0.08] bg-[#0b0b0c] p-4">
         <div className="flex flex-wrap items-end gap-4">
           {/* Watchlist */}
           <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">Watchlist</label>
+            <label className="text-xs font-medium text-white/50">Watchlist</label>
             <div className="flex gap-1">
               {(["all", "ozan", "custom"] as const).map((w) => (
                 <button key={w} onClick={() => setWatchlist(w)}
                   className={cn("rounded px-3 py-1.5 text-xs font-medium transition-colors",
-                    watchlist === w ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-accent")}>
+                    watchlist === w ? "bg-[#ff7200] text-white" : "bg-white/5 text-white/60 hover:bg-white/10")}>
                   {w === "all" ? "All (34)" : w === "ozan" ? "Ozan (11)" : "Custom"}
                 </button>
               ))}
@@ -214,34 +214,34 @@ export default function CSPScreenerPage() {
           {/* Custom tickers input */}
           {watchlist === "custom" && (
             <div className="space-y-1 flex-1 min-w-[200px]">
-              <label className="text-xs font-medium text-muted-foreground">Tickers (virgülle)</label>
+              <label className="text-xs font-medium text-white/50">Tickers (virgülle)</label>
               <input type="text" value={customTickers} onChange={(e) => setCustomTickers(e.target.value)}
                 placeholder="TSLA,NVDA,AMD..."
-                className="w-full rounded border border-border bg-background px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring" />
+                className="w-full rounded border border-white/[0.08] bg-[#050505] px-3 py-1.5 text-sm text-white placeholder:text-white/50 focus:outline-none focus:ring-1 focus:ring-[#ff7200]/50" />
             </div>
           )}
 
           {/* Expiry */}
           <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">Vade</label>
+            <label className="text-xs font-medium text-white/50">Vade</label>
             <select value={expiry} onChange={(e) => setExpiry(e.target.value)}
-              className="rounded border border-border bg-background px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring">
+              className="rounded border border-white/[0.08] bg-[#050505] px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-[#ff7200]/50">
               {fridays.map((f) => <option key={f.date} value={f.date}>{f.label}</option>)}
             </select>
           </div>
 
           {/* Min OI */}
           <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">Min OI</label>
+            <label className="text-xs font-medium text-white/50">Min OI</label>
             <input type="number" value={minOI} onChange={(e) => setMinOI(Number(e.target.value))} min={0}
-              className="w-20 rounded border border-border bg-background px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring" />
+              className="w-20 rounded border border-white/[0.08] bg-[#050505] px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-[#ff7200]/50" />
           </div>
 
           {/* Sort */}
           <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">Sırala</label>
+            <label className="text-xs font-medium text-white/50">Sırala</label>
             <select value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)}
-              className="rounded border border-border bg-background px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring">
+              className="rounded border border-white/[0.08] bg-[#050505] px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-[#ff7200]/50">
               <option value="maxIV">Max IV</option>
               <option value="atmIV">ATM IV</option>
               <option value="maxYield">Max Getiri%</option>
@@ -250,15 +250,15 @@ export default function CSPScreenerPage() {
           </div>
 
           {/* Hide K4 */}
-          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+          <label className="flex items-center gap-2 text-xs text-white/50 cursor-pointer">
             <input type="checkbox" checked={hideK4} onChange={(e) => setHideK4(e.target.checked)}
-              className="rounded border-border" />
+              className="rounded border-white/[0.08]" />
             K4 gizle
           </label>
 
           {/* Scan button */}
           <button onClick={handleScan} disabled={isLoading}
-            className="rounded bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2">
+            className="rounded bg-primary px-4 py-1.5 text-sm font-medium text-[#ff7200]-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2">
             {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <TrendingUp className="h-4 w-4" />}
             {isLoading ? "Taranıyor..." : "Tara"}
           </button>
@@ -271,7 +271,7 @@ export default function CSPScreenerPage() {
           {([1, 2, 3, 4] as const).map((k) => (
             <div key={k} className="flex items-center gap-1.5 text-xs">
               <IVClassBadge ivClass={k} />
-              <span className="text-muted-foreground">{data.classDist[k]}</span>
+              <span className="text-white/50">{data.classDist[k]}</span>
             </div>
           ))}
         </div>
@@ -280,24 +280,24 @@ export default function CSPScreenerPage() {
       {/* Top CSP Picks by IV Bucket */}
       {data?.topPicks && (Object.values(data.topPicks).some((arr: unknown[]) => arr.length > 0)) && (
         <div className="space-y-3">
-          <h2 className="text-sm font-bold text-foreground">🎯 Top CSP Picks</h2>
+          <h2 className="text-sm font-bold text-white">🎯 Top CSP Picks</h2>
           {(["70-100", "100-140", "140+"] as const).map((bucket) => {
             const picks = (data.topPicks as Record<string, Array<{ ticker: string; strike: number; expiry: string; dte: number; mid: number; iv: number | null; collateral: number; premium: number; cspScore: number; executablePremiumAmount: number; delta: number | null; probabilityITM: number | null; expectedMoveBuffer: number | null; spreadPct: number | null; companyQuality: string; actionLabel: string; riskNotes: string[]; executablePremium: number }>>)[bucket];
             if (!picks || picks.length === 0) return null;
             return (
               <div key={bucket}>
-                <h3 className="text-xs font-semibold text-muted-foreground mb-2">IV {bucket}%</h3>
+                <h3 className="text-xs font-semibold text-white/50 mb-2">IV {bucket}%</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                   {picks.map((p, i) => (
-                    <div key={i} className="rounded border border-border bg-card p-3 text-xs space-y-1">
+                    <div key={i} className="rounded border border-white/[0.08] bg-[#0b0b0c] p-3 text-xs space-y-1">
                       <div className="flex justify-between items-center">
-                        <span className="font-bold text-foreground">{p.ticker} {p.strike}P</span>
+                        <span className="font-bold text-white">{p.ticker} {p.strike}P</span>
                         <span className={cn("font-bold", p.cspScore >= 72 ? "text-emerald-400" : p.cspScore >= 50 ? "text-yellow-400" : "text-red-400")}>{p.cspScore}</span>
                       </div>
-                      <div className="text-muted-foreground">{p.expiry} • {p.dte}g</div>
-                      <div className="grid grid-cols-2 gap-x-3 text-muted-foreground">
-                        <span>Premium: <b className="text-foreground">${p.executablePremiumAmount?.toFixed(0)}</b></span>
-                        <span>IV: <b className="text-foreground">{p.iv?.toFixed(0)}%</b></span>
+                      <div className="text-white/50">{p.expiry} • {p.dte}g</div>
+                      <div className="grid grid-cols-2 gap-x-3 text-white/50">
+                        <span>Premium: <b className="text-white">${p.executablePremiumAmount?.toFixed(0)}</b></span>
+                        <span>IV: <b className="text-white">{p.iv?.toFixed(0)}%</b></span>
                         <span>Delta: {p.delta?.toFixed(2) ?? "—"}</span>
                         <span>P(ITM): {p.probabilityITM?.toFixed(1) ?? "—"}%</span>
                         <span>EM Buffer: {p.expectedMoveBuffer?.toFixed(1) ?? "—"}x</span>
@@ -321,15 +321,15 @@ export default function CSPScreenerPage() {
       {filteredGroups.length > 0 && (
         <div className="space-y-4">
           {filteredGroups.map((group) => (
-            <div key={group.ticker} className="rounded-lg border border-border bg-card overflow-hidden">
+            <div key={group.ticker} className="rounded-lg border border-white/[0.08] bg-[#0b0b0c] overflow-hidden">
               {/* Group Header */}
-              <div className="flex items-center justify-between border-b border-border bg-muted/30 px-4 py-2">
+              <div className="flex items-center justify-between border-b border-white/[0.08] bg-muted/30 px-4 py-2">
                 <div className="flex items-center gap-3">
-                  <span className="text-sm font-bold text-foreground">{group.ticker}</span>
-                  <span className="text-xs text-muted-foreground">${group.spot.toFixed(2)}</span>
+                  <span className="text-sm font-bold text-white">{group.ticker}</span>
+                  <span className="text-xs text-white/50">${group.spot.toFixed(2)}</span>
                   <IVClassBadge ivClass={group.bestClass} />
                 </div>
-                <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                <div className="flex items-center gap-4 text-xs text-white/50">
                   {group.maxIV && <span>Max IV: <span className="text-yellow-400 font-medium">{group.maxIV.toFixed(0)}%</span></span>}
                   {group.atmIV && <span>ATM IV: <span className="text-blue-400 font-medium">{group.atmIV.toFixed(0)}%</span></span>}
                   <span>Max Getiri: <span className="text-emerald-400 font-medium">{group.maxYield.toFixed(2)}%</span></span>
@@ -341,7 +341,7 @@ export default function CSPScreenerPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="border-b border-border text-muted-foreground">
+                    <tr className="border-b border-white/[0.08] text-white/50">
                       <th className="px-3 py-2 text-left font-medium">Strike</th>
                       <th className="px-3 py-2 text-center font-medium">Score</th>
                       <th className="px-3 py-2 text-right font-medium">Bid</th>
@@ -360,23 +360,23 @@ export default function CSPScreenerPage() {
                   </thead>
                   <tbody>
                     {group.strikes.map((s) => (
-                      <tr key={`${s.ticker}-${s.strike}`} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
-                        <td className="px-3 py-1.5 font-medium text-foreground">${s.strike.toFixed(1)}</td>
+                      <tr key={`${s.ticker}-${s.strike}`} className="border-b border-white/[0.08]/50 hover:bg-white/[0.03] transition-colors">
+                        <td className="px-3 py-1.5 font-medium text-white">${s.strike.toFixed(1)}</td>
                         <td className="px-3 py-1.5 text-center"><span className={cn("font-bold", (s as any).cspScore >= 72 ? "text-emerald-400" : (s as any).cspScore >= 50 ? "text-yellow-400" : "text-red-400")}>{(s as any).cspScore ?? "—"}</span></td>
-                        <td className="px-3 py-1.5 text-right text-muted-foreground">{s.bid.toFixed(2)}</td>
-                        <td className="px-3 py-1.5 text-right text-muted-foreground">{s.ask.toFixed(2)}</td>
-                        <td className="px-3 py-1.5 text-right font-medium text-foreground">{s.mid.toFixed(2)}</td>
+                        <td className="px-3 py-1.5 text-right text-white/50">{s.bid.toFixed(2)}</td>
+                        <td className="px-3 py-1.5 text-right text-white/50">{s.ask.toFixed(2)}</td>
+                        <td className="px-3 py-1.5 text-right font-medium text-white">{s.mid.toFixed(2)}</td>
                         <td className="px-3 py-1.5 text-right text-yellow-400">{s.iv ? `${s.iv.toFixed(0)}%` : "—"}</td>
                         <td className="px-3 py-1.5 text-center"><IVClassBadge ivClass={s.ivClass} /></td>
                         <td className="px-3 py-1.5 text-right text-emerald-400 font-medium">{s.yieldPct.toFixed(2)}%</td>
                         <td className="px-3 py-1.5 text-right text-emerald-400">{s.annYield.toFixed(0)}%</td>
                         <td className="px-3 py-1.5 text-right text-blue-400">{s.discount.toFixed(1)}%</td>
-                        <td className="px-3 py-1.5 text-right text-muted-foreground">${s.collateral.toLocaleString()}</td>
-                        <td className="px-3 py-1.5 text-right text-foreground">${s.premium.toFixed(0)}</td>
-                        <td className="px-3 py-1.5 text-right text-muted-foreground">{s.oi > 0 ? s.oi.toLocaleString() : "—"}</td>
+                        <td className="px-3 py-1.5 text-right text-white/50">${s.collateral.toLocaleString()}</td>
+                        <td className="px-3 py-1.5 text-right text-white">${s.premium.toFixed(0)}</td>
+                        <td className="px-3 py-1.5 text-right text-white/50">{s.oi > 0 ? s.oi.toLocaleString() : "—"}</td>
                         <td className="px-3 py-1.5 text-center">
                           <button onClick={() => addToBasket(s)}
-                            className="rounded p-1 text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                            className="rounded p-1 text-white/50 hover:text-[#ff7200] hover:bg-[#ff7200]/10 transition-colors"
                             title="Sepete ekle">
                             <ShoppingCart className="h-3.5 w-3.5" />
                           </button>
@@ -393,48 +393,48 @@ export default function CSPScreenerPage() {
 
       {/* Basket */}
       {basket.length > 0 && (
-        <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+        <div className="rounded-lg border border-white/[0.08] bg-[#0b0b0c] p-4 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-foreground flex items-center gap-2">
+            <h2 className="text-sm font-bold text-white flex items-center gap-2">
               <DollarSign className="h-4 w-4 text-emerald-400" /> Sepet ({basketTotals.totalQty} kontrat)
             </h2>
-            <button onClick={() => setBasket([])} className="text-xs text-muted-foreground hover:text-destructive transition-colors">
+            <button onClick={() => setBasket([])} className="text-xs text-white/50 hover:text-red-400 transition-colors">
               Temizle
             </button>
           </div>
 
           {/* Basket Summary */}
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-            <div className="rounded border border-border p-2 text-center">
-              <p className="text-[10px] text-muted-foreground">Toplam Teminat</p>
-              <p className="text-sm font-bold text-foreground">${basketTotals.totalCollateral.toLocaleString()}</p>
+            <div className="rounded border border-white/[0.08] p-2 text-center">
+              <p className="text-[10px] text-white/50">Toplam Teminat</p>
+              <p className="text-sm font-bold text-white">${basketTotals.totalCollateral.toLocaleString()}</p>
             </div>
-            <div className="rounded border border-border p-2 text-center">
-              <p className="text-[10px] text-muted-foreground">Toplam Prim</p>
+            <div className="rounded border border-white/[0.08] p-2 text-center">
+              <p className="text-[10px] text-white/50">Toplam Prim</p>
               <p className="text-sm font-bold text-emerald-400">${basketTotals.totalPremium.toFixed(0)}</p>
             </div>
-            <div className="rounded border border-border p-2 text-center">
-              <p className="text-[10px] text-muted-foreground">Getiri%</p>
+            <div className="rounded border border-white/[0.08] p-2 text-center">
+              <p className="text-[10px] text-white/50">Getiri%</p>
               <p className="text-sm font-bold text-emerald-400">{basketTotals.yieldPct.toFixed(2)}%</p>
             </div>
-            <div className="rounded border border-border p-2 text-center">
-              <p className="text-[10px] text-muted-foreground">Yıllık%</p>
+            <div className="rounded border border-white/[0.08] p-2 text-center">
+              <p className="text-[10px] text-white/50">Yıllık%</p>
               <p className="text-sm font-bold text-emerald-400">{basketTotals.annYield.toFixed(0)}%</p>
             </div>
-            <div className="rounded border border-border p-2 text-center">
-              <p className="text-[10px] text-muted-foreground">Ort. DTE</p>
-              <p className="text-sm font-bold text-foreground">{basketTotals.avgDTE.toFixed(0)}g</p>
+            <div className="rounded border border-white/[0.08] p-2 text-center">
+              <p className="text-[10px] text-white/50">Ort. DTE</p>
+              <p className="text-sm font-bold text-white">{basketTotals.avgDTE.toFixed(0)}g</p>
             </div>
           </div>
 
           {/* Basket Items */}
           <div className="space-y-1">
             {basket.map((item, idx) => (
-              <div key={item.id} className="flex items-center justify-between rounded border border-border/50 px-3 py-1.5 text-xs">
+              <div key={item.id} className="flex items-center justify-between rounded border border-white/[0.08]/50 px-3 py-1.5 text-xs">
                 <div className="flex items-center gap-3">
-                  <span className="font-medium text-foreground">{item.ticker}</span>
-                  <span className="text-muted-foreground">${item.strike} P</span>
-                  <span className="text-muted-foreground">{item.expiry}</span>
+                  <span className="font-medium text-white">{item.ticker}</span>
+                  <span className="text-white/50">${item.strike} P</span>
+                  <span className="text-white/50">{item.expiry}</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-emerald-400">${item.premium.toFixed(0)}</span>
@@ -443,7 +443,7 @@ export default function CSPScreenerPage() {
                     <span className="w-5 text-center font-medium">{item.qty}</span>
                     <button onClick={() => updateQty(idx, 1)} className="rounded p-0.5 hover:bg-muted"><Plus className="h-3 w-3" /></button>
                   </div>
-                  <button onClick={() => removeFromBasket(idx)} className="text-muted-foreground hover:text-destructive"><Trash2 className="h-3 w-3" /></button>
+                  <button onClick={() => removeFromBasket(idx)} className="text-white/50 hover:text-red-400"><Trash2 className="h-3 w-3" /></button>
                 </div>
               </div>
             ))}
@@ -453,15 +453,15 @@ export default function CSPScreenerPage() {
 
       {/* Diagnostics */}
       {data?.diagnostics && data.diagnostics.some((d) => d.reason) && (
-        <details className="rounded-lg border border-border bg-card">
-          <summary className="cursor-pointer px-4 py-2 text-xs font-medium text-muted-foreground flex items-center gap-2">
+        <details className="rounded-lg border border-white/[0.08] bg-[#0b0b0c]">
+          <summary className="cursor-pointer px-4 py-2 text-xs font-medium text-white/50 flex items-center gap-2">
             <AlertTriangle className="h-3.5 w-3.5" /> Diagnostics ({data.diagnostics.filter((d) => d.reason).length} sorun)
           </summary>
           <div className="px-4 pb-3 space-y-1">
             {data.diagnostics.filter((d) => d.reason).map((d) => (
               <div key={d.ticker} className="flex items-center gap-2 text-xs">
-                <span className="font-medium text-foreground w-12">{d.ticker}</span>
-                <span className="text-muted-foreground">{d.reason}</span>
+                <span className="font-medium text-white w-12">{d.ticker}</span>
+                <span className="text-white/50">{d.reason}</span>
               </div>
             ))}
           </div>
@@ -471,8 +471,8 @@ export default function CSPScreenerPage() {
       {/* Empty state */}
       {!data && !isLoading && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <DollarSign className="h-12 w-12 text-muted-foreground/30 mb-4" />
-          <p className="text-sm text-muted-foreground">Watchlist ve vade seçip &quot;Tara&quot; butonuna basın</p>
+          <DollarSign className="h-12 w-12 text-white/50/30 mb-4" />
+          <p className="text-sm text-white/50">Watchlist ve vade seçip &quot;Tara&quot; butonuna basın</p>
         </div>
       )}
     </div>
