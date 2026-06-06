@@ -5,13 +5,12 @@ import { usePathname } from "next/navigation";
 import { Home, ChevronDown, ChevronRight, Star, GripVertical, X } from "lucide-react";
 import { MODULE_REGISTRY } from "@/lib/modules/registry";
 import { useState, useEffect } from "react";
-import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, closestCenter, useDroppable, useDraggable } from "@dnd-kit/core";
+import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, pointerWithin, useDroppable, useDraggable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { trpc } from "@/lib/trpc/client";
 import trMessages from "@/../messages/tr.json";
 
-// ─── i18n helper ─────────────────────────────────────────────────────────────
 function t(key: string): string {
   const parts = key.split(".");
   let val: unknown = trMessages;
@@ -22,29 +21,28 @@ function t(key: string): string {
   return typeof val === "string" ? val : key.split(".").pop() || key;
 }
 
-// ─── Types ───────────────────────────────────────────────────────────────────
 interface FavoriteItem { href: string; labelKey: string; order: number; }
 
-// ─── Draggable Sub-Item ──────────────────────────────────────────────────────
 function DraggableSubItem({ href, label }: { href: string; label: string }) {
   const pathname = usePathname();
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: href, data: { href, label } });
   const isActive = pathname === href;
 
   return (
-    <div ref={setNodeRef} {...attributes} {...listeners}
-      className={`flex items-center h-[48px] cursor-grab ${isDragging ? "opacity-40" : ""}`}
-      style={{ paddingLeft: "58px", paddingRight: "24px" }}
-    >
-      <Link href={href} onClick={(e) => { if (isDragging) e.preventDefault(); }}
-        className={`text-[18px] font-semibold leading-[28px] transition-colors ${isActive ? "text-[#ff7200]" : "text-[#d8d8d8] hover:text-white"}`}>
+    <div ref={setNodeRef}
+      className={`flex items-center h-[38px] ${isActive ? "bg-[#18191b]" : "hover:bg-[#0d0d0d]"} ${isDragging ? "opacity-30" : ""}`}
+      style={{ paddingLeft: "28px", paddingRight: "20px" }}>
+      <span {...attributes} {...listeners} className="mr-[10px] cursor-grab text-white/25 hover:text-white/60 flex-shrink-0">
+        <GripVertical size={13} />
+      </span>
+      <Link href={href}
+        className={`text-[14px] font-medium ${isActive ? "text-[#ff7200]" : "text-[#ccc] hover:text-white"}`}>
         {label}
       </Link>
     </div>
   );
 }
 
-// ─── Sortable Favorite ───────────────────────────────────────────────────────
 function SortableFavorite({ item, onRemove }: { item: FavoriteItem; onRemove: () => void }) {
   const pathname = usePathname();
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: item.href });
@@ -53,71 +51,65 @@ function SortableFavorite({ item, onRemove }: { item: FavoriteItem; onRemove: ()
 
   return (
     <div ref={setNodeRef} style={style}
-      className={`flex items-center h-[44px] group ${isActive ? "bg-[#18191b]" : ""}`}
-    >
-      <span {...attributes} {...listeners} className="pl-[14px] pr-[8px] cursor-grab opacity-40 hover:opacity-100">
-        <GripVertical size={14} className="text-white/50" />
+      className={`flex items-center h-[38px] group ${isActive ? "bg-[#18191b]" : "hover:bg-[#0d0d0d]"}`}
+      >
+      <span {...attributes} {...listeners} className="pl-[14px] pr-[6px] cursor-grab text-white/25 hover:text-white/60">
+        <GripVertical size={13} />
       </span>
-      <Link href={item.href} className={`flex-1 text-[15px] font-semibold ${isActive ? "text-[#ff7200]" : "text-[#d8d8d8] hover:text-white"}`}>
+      <Link href={item.href} className={`flex-1 text-[14px] font-medium ${isActive ? "text-[#ff7200]" : "text-[#ccc] hover:text-white"}`}>
         {item.labelKey}
       </Link>
-      <button onClick={onRemove} className="pr-[16px] opacity-0 group-hover:opacity-100 text-white/40 hover:text-red-400">
-        <X size={14} />
+      <button onClick={onRemove} className="pr-[14px] opacity-0 group-hover:opacity-100 text-white/30 hover:text-red-400">
+        <X size={12} />
       </button>
     </div>
   );
 }
 
-// ─── Favorites Zone ──────────────────────────────────────────────────────────
 function FavoritesZone({ items, onRemove }: { items: FavoriteItem[]; onRemove: (href: string) => void }) {
   const { setNodeRef, isOver } = useDroppable({ id: "favorites-zone" });
 
-  if (items.length === 0 && !isOver) return <div ref={setNodeRef} className="h-[2px]" />;
-
   return (
-    <div ref={setNodeRef} className={`py-[8px] border-b border-white/10 ${isOver ? "bg-[#ff7200]/5" : ""}`}>
-      <div className="flex items-center h-[32px] px-[36px]">
-        <Star size={13} className="text-[#ff7200] mr-[8px]" />
-        <span className="text-[13px] font-semibold tracking-[0.08em] uppercase text-white/60">Favoriler</span>
+    <div ref={setNodeRef}
+      className={`border-b border-white/[0.06] transition-colors min-h-[60px] ${isOver ? "bg-[#ff7200]/10" : ""}`}
+      style={{ padding: "8px 0" }}>
+      <div className="flex items-center h-[28px] px-[20px]">
+        <Star size={12} className="text-[#ff7200] mr-[6px]" />
+        <span className="text-[11px] font-semibold tracking-[0.06em] uppercase text-white/50">Favoriler</span>
       </div>
+      {items.length === 0 && (
+        <p className={`text-[11px] text-center py-[6px] ${isOver ? "text-[#ff7200]" : "text-white/20"}`}>
+          {isOver ? "→ Bırak" : "⋮⋮ sürükleyerek ekle"}
+        </p>
+      )}
       <SortableContext items={items.map((i) => i.href)} strategy={verticalListSortingStrategy}>
         {items.map((item) => (
           <SortableFavorite key={item.href} item={item} onRemove={() => onRemove(item.href)} />
         ))}
       </SortableContext>
-      {items.length === 0 && isOver && (
-        <div className="text-[12px] text-center text-[#ff7200] py-[6px]">Buraya bırak</div>
-      )}
     </div>
   );
 }
 
-// ─── Main Sidebar ────────────────────────────────────────────────────────────
 export function Sidebar() {
   const pathname = usePathname();
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({ signallab: true });
+  // All menus open by default
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({ signallab: true, finsumy: true });
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
 
   const utils = trpc.useUtils();
   const { data: pref } = trpc.userPref.get.useQuery();
-  const setFavMutation = trpc.userPref.setFavorites.useMutation({
-    onSuccess: () => utils.userPref.get.invalidate(),
-  });
+  const setFavMutation = trpc.userPref.setFavorites.useMutation({ onSuccess: () => utils.userPref.get.invalidate() });
 
   useEffect(() => {
     if (pref?.favorites) setFavorites(pref.favorites as unknown as FavoriteItem[]);
   }, [pref]);
 
   const toggle = (id: string) => setExpanded((p) => ({ ...p, [id]: !p[id] }));
-
-  const persist = (newFavs: FavoriteItem[]) => {
-    setFavorites(newFavs);
-    setFavMutation.mutate({ favorites: newFavs });
-  };
+  const persist = (f: FavoriteItem[]) => { setFavorites(f); setFavMutation.mutate({ favorites: f }); };
 
   const handleDragStart = (e: DragStartEvent) => setActiveId(e.active.id as string);
-
   const handleDragEnd = (e: DragEndEvent) => {
     setActiveId(null);
     const { active, over } = e;
@@ -131,68 +123,44 @@ export function Sidebar() {
       return;
     }
 
-    const oldIdx = favorites.findIndex((f) => f.href === href);
-    const newIdx = favorites.findIndex((f) => f.href === over.id);
-    if (oldIdx !== -1 && newIdx !== -1 && oldIdx !== newIdx) {
-      persist(arrayMove(favorites, oldIdx, newIdx).map((f, i) => ({ ...f, order: i })));
+    const oi = favorites.findIndex((f) => f.href === href);
+    const ni = favorites.findIndex((f) => f.href === over.id);
+    if (oi !== -1 && ni !== -1 && oi !== ni) {
+      persist(arrayMove(favorites, oi, ni).map((f, i) => ({ ...f, order: i })));
     }
   };
 
-  const removeFav = (href: string) => persist(favorites.filter((f) => f.href !== href).map((f, i) => ({ ...f, order: i })));
-
   return (
-    <DndContext collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <aside className="w-[280px] h-screen bg-[#000] flex flex-col overflow-y-auto shrink-0"
+    <DndContext collisionDetection={pointerWithin} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      <aside className="w-[240px] h-screen bg-[#000] flex flex-col overflow-y-auto shrink-0"
         style={{ fontFamily: '-apple-system, BlinkMacSystemFont, Arial, sans-serif, "Segoe UI", Roboto' }}>
 
-        {/* Home */}
         <Link href="/dashboard"
-          className={`flex items-center h-[58px] px-[36px] gap-[22px] ${pathname === "/dashboard" ? "bg-[#18191b]" : "hover:bg-[#18191b]/50"}`}>
-          <Home size={28} className={pathname === "/dashboard" ? "text-[#ff7200]" : "text-[#f2f2f2]"} />
-          <span className={`text-[20px] font-semibold leading-[30px] ${pathname === "/dashboard" ? "text-[#ff7200]" : "text-[#f2f2f2]"}`}>
-            Ana Sayfa
-          </span>
+          className={`flex items-center h-[46px] px-[20px] gap-[12px] ${pathname === "/dashboard" ? "bg-[#18191b]" : "hover:bg-[#0d0d0d]"}`}>
+          <Home size={18} className={pathname === "/dashboard" ? "text-[#ff7200]" : "text-[#f2f2f2]"} />
+          <span className={`text-[15px] font-semibold ${pathname === "/dashboard" ? "text-[#ff7200]" : "text-[#f2f2f2]"}`}>Ana Sayfa</span>
         </Link>
 
-        {/* Favorites */}
-        <FavoritesZone items={favorites} onRemove={removeFav} />
+        <FavoritesZone items={favorites} onRemove={(h) => persist(favorites.filter((f) => f.href !== h).map((f, i) => ({ ...f, order: i })))} />
 
-        {/* Modules */}
-        <nav className="flex-1 py-[8px]">
-          {MODULE_REGISTRY.map((mod) => {
+        <nav className="flex-1 py-[4px]">
+          {MODULE_REGISTRY.filter((m) => m.implemented).map((mod) => {
             const Icon = mod.icon;
             const isExp = expanded[mod.id] ?? false;
-
-            if (!mod.implemented) {
-              return (
-                <Link key={mod.id} href={`/dashboard/stub/${mod.id}`}
-                  className="flex items-center h-[58px] px-[36px] gap-[22px] opacity-40 hover:opacity-60">
-                  <Icon size={28} className="text-[#f2f2f2]" />
-                  <span className="text-[20px] font-semibold leading-[30px] text-[#f2f2f2]">{mod.id}</span>
-                  <span className="ml-auto text-[11px] bg-white/10 px-[8px] py-[2px] rounded-[2px] text-white/60">Yakında</span>
-                </Link>
-              );
-            }
 
             return (
               <div key={mod.id}>
                 <button onClick={() => toggle(mod.id)}
-                  className={`flex items-center w-full h-[58px] px-[36px] gap-[22px] ${isExp ? "bg-[#18191b]" : "hover:bg-[#18191b]/50"}`}>
-                  <Icon size={28} className="text-[#f2f2f2]" />
-                  <span className="text-[20px] font-semibold leading-[30px] text-[#f2f2f2]">
+                  className={`flex items-center w-full h-[46px] px-[20px] gap-[12px] ${isExp ? "bg-[#18191b]" : "hover:bg-[#0d0d0d]"}`}>
+                  <Icon size={18} className="text-[#f2f2f2]" />
+                  <span className="text-[15px] font-semibold text-[#f2f2f2]">
                     {mod.id === "signallab" ? "SignalLab" : "FinSumy"}
                   </span>
-                  {isExp
-                    ? <ChevronDown size={18} className="ml-auto text-white/50" />
-                    : <ChevronRight size={18} className="ml-auto text-white/50" />}
+                  {isExp ? <ChevronDown size={14} className="ml-auto text-white/40" /> : <ChevronRight size={14} className="ml-auto text-white/40" />}
                 </button>
-                {isExp && (
-                  <div className="bg-[#050505]">
-                    {mod.items.map((item) => (
-                      <DraggableSubItem key={item.href} href={item.href} label={t(item.labelKey)} />
-                    ))}
-                  </div>
-                )}
+                {isExp && mod.items.map((item) => (
+                  <DraggableSubItem key={item.href} href={item.href} label={t(item.labelKey)} />
+                ))}
               </div>
             );
           })}
@@ -201,7 +169,7 @@ export function Sidebar() {
 
       <DragOverlay>
         {activeId && (
-          <div className="bg-[#18191b] text-[#ff7200] px-[16px] py-[8px] text-[15px] font-semibold rounded-[4px] shadow-xl border border-[#ff7200]/30">
+          <div className="bg-[#18191b] text-[#ff7200] px-[12px] py-[6px] text-[13px] font-semibold rounded-[3px] shadow-xl border border-[#ff7200]/20">
             {activeId.split("/").pop()}
           </div>
         )}

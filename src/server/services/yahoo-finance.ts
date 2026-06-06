@@ -7,6 +7,18 @@
 
 import { greeks as bsGreeks, realWorldProbability } from "./black-scholes";
 
+// ─── Retry helper ────────────────────────────────────────────────────────────
+async function sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
+async function withRetry<T>(fn: () => Promise<T>, retries = 3, baseDelay = 2000): Promise<T> {
+  for (let i = 0; i < retries; i++) {
+    try { return await fn(); } catch (e) {
+      if (i === retries - 1) throw e;
+      await sleep(baseDelay * (i + 1));
+    }
+  }
+  throw new Error("unreachable");
+}
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export interface ExpiryInfo {
@@ -167,6 +179,7 @@ async function ensureCrumb(): Promise<{ crumb: string; cookies: string }> {
 // ─── Low-level fetch ─────────────────────────────────────────────────────────
 
 async function fetchJSON(urlStr: string): Promise<unknown> {
+  return withRetry(async () => {
   const { crumb: c, cookies } = await ensureCrumb();
   const separator = urlStr.includes("?") ? "&" : "?";
   const fullURL = `${urlStr}${separator}crumb=${encodeURIComponent(c)}`;
@@ -203,6 +216,7 @@ async function fetchJSON(urlStr: string): Promise<unknown> {
 
   if (!resp.ok) throw new Error(`Yahoo API error: HTTP ${resp.status}`);
   return resp.json();
+  }); // withRetry
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────────
