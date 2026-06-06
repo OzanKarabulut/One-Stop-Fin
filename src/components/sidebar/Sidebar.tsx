@@ -29,11 +29,12 @@ function DraggableSubItem({ href, label }: { href: string; label: string }) {
   const isActive = pathname === href;
 
   return (
-    <div className={`group flex items-center h-[38px] pl-[42px] pr-4 transition-colors ${isActive ? "bg-[#141414] border-l-2 border-[#ff7200]" : "hover:bg-white/[0.03] border-l-2 border-transparent"} ${isDragging ? "opacity-30" : ""}`}>
-      <div ref={setNodeRef} {...attributes} {...listeners}
-        className="mr-2 cursor-grab p-1 -m-1 opacity-30 group-hover:opacity-70 hover:!opacity-100 flex-shrink-0 touch-none">
+    <div ref={setNodeRef}
+      className={`group flex items-center h-[38px] pl-[42px] pr-4 transition-colors ${isActive ? "bg-[#141414] border-l-2 border-[#ff7200]" : "hover:bg-white/[0.03] border-l-2 border-transparent"} ${isDragging ? "opacity-30" : ""}`}>
+      <button type="button" {...attributes} {...listeners}
+        className="mr-2 cursor-grab p-1.5 -m-1 rounded hover:bg-white/10 opacity-40 group-hover:opacity-80 flex-shrink-0 touch-none select-none">
         <GripVertical size={14} />
-      </div>
+      </button>
       <Link href={href}
         className={`text-[14px] flex-1 ${isActive ? "text-[#ff7200] font-medium" : "text-[#b9b9b9] hover:text-white"}`}>
         {label}
