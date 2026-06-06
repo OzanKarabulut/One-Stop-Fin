@@ -3,28 +3,23 @@
 @tailwind utilities;
 
 :root {
-  --sidebar-bg: #16181c;
-  --sidebar-fg: #c9ccd1;
+  --sidebar-bg: #000000;
+  --sidebar-fg: #f2f2f2;
+  --sidebar-muted: rgba(255,255,255,0.62);
+  --sidebar-active-bg: #18191b;
+  --sidebar-sub-fg: #d8d8d8;
   --page-bg: #f6f7f9;
   --card-bg: #ffffff;
   --card-border: #e3e5e8;
-  --accent: #ff6b00;
+  --accent: #ff7200;
   --accent-hover: #ff8c3a;
   --link: #2b6cb0;
   --up: #15803d;
   --down: #dc2626;
   --text-primary: #1a1d21;
   --text-muted: #6b7280;
+}
 
-  /* Aliases for component compatibility */
-  --foreground: var(--text-primary);
-  --muted-foreground: var(--text-muted);
-  --border: var(--card-border);
-  --card: var(--card-bg);
-  --background: var(--page-bg);
-  --primary: var(--accent);
-  --primary-foreground: #ffffff;
-  --destructive: var(--down);
-  --muted: #f3f4f6;
-  --ring: var(--accent);
+body {
+  font-family: -apple-system, BlinkMacSystemFont, Arial, sans-serif, "Segoe UI", Roboto;
 }

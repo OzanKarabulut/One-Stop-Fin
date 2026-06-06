@@ -23,18 +23,6 @@ export interface ModuleDefinition {
 
 export const MODULE_REGISTRY: ModuleDefinition[] = [
   {
-    id: "finsumy",
-    labelKey: "modules.finsumy",
-    icon: BarChart3,
-    implemented: true,
-    items: [
-      { href: "/dashboard/overview", labelKey: "modules.finsumy.overview" },
-      { href: "/dashboard/summaries/youtube", labelKey: "modules.finsumy.youtube" },
-      { href: "/dashboard/channels", labelKey: "modules.finsumy.channels" },
-      { href: "/dashboard/signal-leaders", labelKey: "modules.finsumy.signalLeaders" },
-    ],
-  },
-  {
     id: "signallab",
     labelKey: "modules.signallab",
     icon: TrendingUp,
@@ -45,6 +33,18 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
       { href: "/dashboard/signallab/manual", labelKey: "modules.signallab.manual" },
       { href: "/dashboard/signallab/market-overview", labelKey: "modules.signallab.market" },
       { href: "/dashboard/signallab/watchlist", labelKey: "modules.signallab.watchlist" },
+    ],
+  },
+  {
+    id: "finsumy",
+    labelKey: "modules.finsumy",
+    icon: BarChart3,
+    implemented: true,
+    items: [
+      { href: "/dashboard/overview", labelKey: "modules.finsumy.overview" },
+      { href: "/dashboard/summaries/youtube", labelKey: "modules.finsumy.youtube" },
+      { href: "/dashboard/channels", labelKey: "modules.finsumy.channels" },
+      { href: "/dashboard/signal-leaders", labelKey: "modules.finsumy.signalLeaders" },
     ],
   },
   {
