@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Home, ChevronDown, ChevronRight, Star, X } from "lucide-react";
 import { MODULE_REGISTRY } from "@/lib/modules/registry";
 import { useState, useEffect } from "react";
@@ -19,6 +19,22 @@ function t(key: string): string {
 }
 
 interface FavoriteItem { href: string; labelKey: string; order: number; }
+
+function SubItem({ href, label, isActive, starred, onStar }: { href: string; label: string; isActive: boolean; starred: boolean; onStar: () => void }) {
+  const router = useRouter();
+  return (
+    <div className={`group flex items-center h-[38px] pl-[42px] pr-3 transition-colors cursor-pointer ${isActive ? "bg-[#141414] border-l-2 border-[#ff7200]" : "hover:bg-white/[0.03] border-l-2 border-transparent"}`}
+      onClick={() => router.push(href)}>
+      <span className={`text-[14px] flex-1 ${isActive ? "text-[#ff7200] font-medium" : "text-[#b9b9b9]"}`}>{label}</span>
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onStar(); }}
+        className={`p-1.5 rounded hover:bg-white/10 opacity-0 group-hover:opacity-100 ${starred ? "!opacity-100 text-[#ff7200]" : "text-white/40 hover:text-[#ff7200]"}`}>
+        <Star size={13} fill={starred ? "currentColor" : "none"} />
+      </button>
+    </div>
+  );
+}
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -107,20 +123,8 @@ export function Sidebar() {
                     const isActive = pathname === item.href;
                     const starred = isFav(item.href);
                     return (
-                      <div key={item.href}
-                        className={`group relative flex items-center h-[38px] pl-[42px] pr-3 transition-colors ${isActive ? "bg-[#141414] border-l-2 border-[#ff7200]" : "hover:bg-white/[0.03] border-l-2 border-transparent"}`}>
-                        <Link href={item.href}
-                          className={`text-[14px] absolute inset-0 flex items-center pl-[42px] pr-[36px] ${isActive ? "text-[#ff7200] font-medium" : "text-[#b9b9b9] hover:text-white"}`}>
-                          {label}
-                        </Link>
-                        <button
-                          type="button"
-                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); starred ? removeFav(item.href) : addFav(item.href, label); }}
-                          className={`relative z-10 ml-auto p-1 rounded hover:bg-white/10 opacity-0 group-hover:opacity-100 ${starred ? "!opacity-100 text-[#ff7200]" : "text-white/40 hover:text-[#ff7200]"}`}
-                          title={starred ? "Favorilerden kaldır" : "Favorilere ekle"}>
-                          <Star size={13} fill={starred ? "currentColor" : "none"} />
-                        </button>
-                      </div>
+                      <SubItem key={item.href} href={item.href} label={label} isActive={isActive} starred={starred}
+                        onStar={() => starred ? removeFav(item.href) : addFav(item.href, label)} />
                     );
                   })}
                 </div>
