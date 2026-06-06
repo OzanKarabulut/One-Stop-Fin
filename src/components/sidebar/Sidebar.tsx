@@ -117,7 +117,7 @@ export function Sidebar() {
                           type="button"
                           onMouseDown={(e) => e.stopPropagation()}
                           onClick={(e) => { e.preventDefault(); e.stopPropagation(); starred ? removeFav(item.href) : addFav(item.href, label); }}
-                          className={`p-1.5 rounded transition-all ${starred ? "text-[#ff7200] opacity-100" : "text-white/20 opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:!text-[#ff7200]"}`}
+                          className={`p-1.5 rounded transition-all ${starred ? "text-[#ff7200]" : "text-white/30 hover:text-[#ff7200]"}`}
                           title={starred ? "Favorilerden kaldır" : "Favorilere ekle"}>
                           <Star size={13} fill={starred ? "currentColor" : "none"} />
                         </button>
