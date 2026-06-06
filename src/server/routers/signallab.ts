@@ -234,17 +234,14 @@ export const signallabRouter = router({
       const allContracts: CSPContract[] = [];
       const allDiags: CSPDiagnostic[] = [];
 
-      // Process in batches of 6
-      for (let i = 0; i < tickers.length; i += 6) {
-        const batch = tickers.slice(i, i + 6);
-        const results = await Promise.allSettled(
-          batch.map((t) => fetchCSPTicker(t, input.expiry, input.minOI)),
-        );
-        for (const r of results) {
-          if (r.status === "fulfilled") {
-            allContracts.push(...r.value.contracts);
-            allDiags.push(r.value.diag);
-          }
+      // Process tickers serially (provider handles rate limiting internally)
+      for (const t of tickers) {
+        try {
+          const result = await fetchCSPTicker(t, input.expiry, input.minOI);
+          allContracts.push(...result.contracts);
+          allDiags.push(result.diag);
+        } catch {
+          allDiags.push({ ticker: t, spot: null, expiry: null, rawPuts: 0, inRange: 0, hasMid: 0, oiPass: 0, kept: 0, reason: "fetch error" });
         }
       }
 
