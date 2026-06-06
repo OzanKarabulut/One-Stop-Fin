@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { Home, ChevronDown, ChevronRight, Star, GripVertical, X } from "lucide-react";
 import { MODULE_REGISTRY } from "@/lib/modules/registry";
 import { useState, useEffect } from "react";
-import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, closestCenter, useDroppable, useDraggable } from "@dnd-kit/core";
+import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, closestCenter, useDroppable, useDraggable, MouseSensor, TouchSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { trpc } from "@/lib/trpc/client";
@@ -29,11 +29,13 @@ function DraggableSubItem({ href, label }: { href: string; label: string }) {
   const isActive = pathname === href;
 
   return (
-    <div ref={setNodeRef} {...attributes} {...listeners}
-      className={`group flex items-center h-[38px] pl-[42px] pr-4 cursor-grab transition-colors ${isActive ? "bg-[#141414] border-l-2 border-[#ff7200]" : "hover:bg-white/[0.03] border-l-2 border-transparent"} ${isDragging ? "opacity-30" : ""}`}>
-      <GripVertical size={12} className="mr-2 opacity-0 group-hover:opacity-40 flex-shrink-0" />
-      <Link href={href} onClick={(e) => { if (isDragging) e.preventDefault(); }}
-        className={`text-[14px] ${isActive ? "text-[#ff7200] font-medium" : "text-[#b9b9b9] hover:text-white"}`}>
+    <div className={`group flex items-center h-[38px] pl-[42px] pr-4 transition-colors ${isActive ? "bg-[#141414] border-l-2 border-[#ff7200]" : "hover:bg-white/[0.03] border-l-2 border-transparent"} ${isDragging ? "opacity-30" : ""}`}>
+      <div ref={setNodeRef} {...attributes} {...listeners}
+        className="mr-2 cursor-grab p-1 -m-1 opacity-30 group-hover:opacity-70 hover:!opacity-100 flex-shrink-0 touch-none">
+        <GripVertical size={14} />
+      </div>
+      <Link href={href}
+        className={`text-[14px] flex-1 ${isActive ? "text-[#ff7200] font-medium" : "text-[#b9b9b9] hover:text-white"}`}>
         {label}
       </Link>
     </div>
@@ -104,6 +106,10 @@ export function Sidebar() {
   const removeFav = (href: string) => persist(favorites.filter((f) => f.href !== href).map((f, i) => ({ ...f, order: i })));
 
   const handleDragStart = (e: DragStartEvent) => setActiveId(e.active.id as string);
+
+  const mouseSensor = useSensor(MouseSensor, { activationConstraint: { distance: 5 } });
+  const touchSensor = useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } });
+  const sensors = useSensors(mouseSensor, touchSensor);
   const handleDragEnd = (e: DragEndEvent) => {
     setActiveId(null);
     const { active, over } = e;
@@ -121,7 +127,7 @@ export function Sidebar() {
   };
 
   return (
-    <DndContext collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <aside className="w-[264px] h-screen bg-[#060606] border-r border-white/[0.08] flex flex-col overflow-y-auto shrink-0">
 
         {/* Brand */}
