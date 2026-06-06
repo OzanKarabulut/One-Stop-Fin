@@ -8,6 +8,7 @@ import * as yahoo from "../services/yahoo-finance";
 import * as math from "../services/math-engine";
 import { impliedVolBisection } from "../services/black-scholes";
 import { scoreCSPContract, type IVBucket } from "../services/csp-scoring";
+import { marketData } from "../services/market-data";
 
 // ─── CSP Screener Constants ──────────────────────────────────────────────────
 
@@ -124,7 +125,7 @@ async function fetchCSPTicker(
   minOI: number,
 ): Promise<{ contracts: CSPContract[]; diag: CSPDiagnostic }> {
   try {
-    const expiryInfo = await yahoo.getExpirations(ticker);
+    const expiryInfo = await marketData.getExpirations(ticker);
     const spot = expiryInfo.price;
 
     const matchedExpiry = findBestExpiry(expiryInfo.expirations, targetDate);
@@ -133,7 +134,7 @@ async function fetchCSPTicker(
     }
 
     const ts = expiryInfo.expirationTimestamps[matchedExpiry];
-    const chain = await yahoo.getChain(ticker, matchedExpiry, ts);
+    const chain = await marketData.getChain(ticker, matchedExpiry, ts);
     const dte = chain.dte;
     if (dte <= 0) {
       return { contracts: [], diag: { ticker, spot, expiry: matchedExpiry, rawPuts: 0, inRange: 0, hasMid: 0, oiPass: 0, kept: 0, reason: "expiry past" } };
@@ -318,9 +319,9 @@ export const signallabRouter = router({
 
       let chain: yahoo.OptionChain;
       try {
-        const expiryInfo = await yahoo.getExpirations(ticker);
+        const expiryInfo = await marketData.getExpirations(ticker);
         const ts = expiryInfo.expirationTimestamps[expiry];
-        chain = await yahoo.getChain(ticker, expiry, ts);
+        chain = await marketData.getChain(ticker, expiry, ts);
       } catch {
         chain = { ticker, price: quote.price, expiry, dte, calls: [], puts: [] };
       }
@@ -355,14 +356,14 @@ export const signallabRouter = router({
   expirations: publicProcedure
     .input(z.object({ ticker: z.string() }))
     .query(async ({ input }) => {
-      return yahoo.getExpirations(input.ticker);
+      return marketData.getExpirations(input.ticker);
     }),
 
   // Get option chain
   optionChain: publicProcedure
     .input(z.object({ ticker: z.string(), expiry: z.string(), expiryTimestamp: z.number().optional() }))
     .query(async ({ input }) => {
-      return yahoo.getChain(input.ticker, input.expiry, input.expiryTimestamp);
+      return marketData.getChain(input.ticker, input.expiry, input.expiryTimestamp);
     }),
 
   // Ticker lists
