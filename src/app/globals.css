@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --sidebar-bg: #16181c;
+  --sidebar-fg: #c9ccd1;
+  --page-bg: #f6f7f9;
+  --card-bg: #ffffff;
+  --card-border: #e3e5e8;
+  --accent: #ff6b00;
+  --accent-hover: #ff8c3a;
+  --link: #2b6cb0;
+  --up: #15803d;
+  --down: #dc2626;
+  --text-primary: #1a1d21;
+  --text-muted: #6b7280;
+}

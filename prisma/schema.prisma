@@ -1,0 +1,94 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "linux-musl-arm64-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Channel {
+  id          String   @id @default(cuid())
+  youtubeId   String   @unique
+  name        String
+  thumbnailUrl String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  videos      Video[]
+}
+
+model Video {
+  id            String   @id @default(cuid())
+  youtubeId     String   @unique
+  channelId     String
+  title         String
+  publishedAt   DateTime
+  thumbnailUrl  String?
+  transcript    String?
+  summary       String?
+  sentiment     String?
+  sentimentScore Float?
+  processed     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  channel       Channel  @relation(fields: [channelId], references: [id])
+  keyPoints     VideoKeyPoint[]
+  stockMentions StockMention[]
+}
+
+model VideoKeyPoint {
+  id        String @id @default(cuid())
+  videoId   String
+  point     String
+  sentiment String?
+  ticker    String?
+  video     Video  @relation(fields: [videoId], references: [id])
+}
+
+model StockMention {
+  id         String  @id @default(cuid())
+  videoId    String
+  ticker     String
+  sentiment  String
+  score      Float
+  reasoning  String?
+  video      Video   @relation(fields: [videoId], references: [id])
+
+  @@index([ticker])
+}
+
+model TickerSignal {
+  id        String   @id @default(cuid())
+  ticker    String
+  signal    String
+  score     Float
+  sources   Int      @default(0)
+  date      DateTime @default(now())
+  metadata  Json?
+
+  @@index([ticker, date])
+}
+
+model WatchlistItem {
+  id        String   @id @default(cuid())
+  ticker    String   @unique
+  name      String?
+  addedAt   DateTime @default(now())
+  notes     String?
+}
+
+model DailyReport {
+  id        String   @id @default(cuid())
+  date      DateTime @unique
+  content   Json
+  createdAt DateTime @default(now())
+}
+
+model UserPref {
+  id           String @id @default("default")
+  favorites    Json   @default("[]")
+  theme        String @default("light")
+  sidebarState Json   @default("{}")
+}

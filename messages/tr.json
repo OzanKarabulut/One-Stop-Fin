@@ -1,0 +1,54 @@
+{
+  "common": {
+    "home": "Ana Sayfa",
+    "favorites": "Favoriler",
+    "loading": "Yükleniyor...",
+    "error": "Hata oluştu",
+    "noData": "Veri yok",
+    "detail": "Detay →",
+    "comingSoon": "Yakında",
+    "add": "Ekle",
+    "remove": "Kaldır",
+    "save": "Kaydet",
+    "cancel": "İptal"
+  },
+  "modules": {
+    "finsumy": "FinSumy",
+    "finsumy.overview": "Genel Bakış",
+    "finsumy.youtube": "YouTube Özetleri",
+    "finsumy.channels": "Kanallar",
+    "finsumy.signalLeaders": "Sinyal Liderleri",
+    "signallab": "SignalLab",
+    "signallab.csp": "CSP Tarayıcı",
+    "signallab.aiStrategy": "AI Strateji",
+    "signallab.manual": "Manuel Analiz",
+    "signallab.market": "Piyasa",
+    "signallab.watchlist": "İzleme Listesi",
+    "newssumy": "NewsSumy",
+    "edusumy": "EduSumy",
+    "docsumy": "DocSumy",
+    "podsumy": "PodSumy"
+  },
+  "home": {
+    "title": "Ana Sayfa",
+    "marketSignals": "Piyasa Sinyalleri",
+    "signalLeaders": "Sinyal Liderleri",
+    "cspToday": "CSP Tarayıcı (Bugün)",
+    "recentVideos": "Son Video Özetleri",
+    "earnings": "Earnings",
+    "watchlist": "İzleme Listesi"
+  },
+  "signallab": {
+    "cspScreener": "CSP Tarayıcı",
+    "aiStrategy": "AI Strateji",
+    "manualAnalysis": "Manuel Analiz",
+    "marketOverview": "Piyasa Genel Bakış",
+    "watchlist": "İzleme Listesi"
+  },
+  "finsumy": {
+    "overview": "Genel Bakış",
+    "youtube": "YouTube Özetleri",
+    "channels": "Kanallar",
+    "signalLeaders": "Sinyal Liderleri"
+  }
+}
