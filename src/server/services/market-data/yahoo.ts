@@ -1,6 +1,7 @@
 import type { MarketDataProvider, ExpiryInfo, OptionChain, OptionRow } from "./types";
+import { execFileSync } from "child_process";
 
-const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15";
+const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
 
 // ─── Cache ───────────────────────────────────────────────────────────────────
 const cache = new Map<string, { data: unknown; ts: number }>();
@@ -12,31 +13,37 @@ function getCached<T>(key: string): T | null {
 }
 function setCache(key: string, data: unknown) { cache.set(key, { data, ts: Date.now() }); }
 
-// ─── Serial queue: 1 request at a time, 400ms between ───────────────────────
+// ─── Serial queue: 1 request at a time, 2s between ──────────────────────────
 let lastRequestTime = 0;
-const DELAY_MS = 400;
-const mutex = { locked: false, queue: [] as Array<() => void> };
+const DELAY_MS = 2000;
 
 async function serialFetch<T>(fn: () => Promise<T>): Promise<T> {
-  // Wait for lock
-  if (mutex.locked) {
-    await new Promise<void>((resolve) => mutex.queue.push(resolve));
-  }
-  mutex.locked = true;
-  try {
-    const elapsed = Date.now() - lastRequestTime;
-    if (elapsed < DELAY_MS) await sleep(DELAY_MS - elapsed);
-    const result = await fn();
-    lastRequestTime = Date.now();
-    return result;
-  } finally {
-    mutex.locked = false;
-    const next = mutex.queue.shift();
-    if (next) next();
-  }
+  const elapsed = Date.now() - lastRequestTime;
+  if (elapsed < DELAY_MS) await sleep(DELAY_MS - elapsed);
+  lastRequestTime = Date.now();
+  return fn();
 }
 
 function sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
+
+// ─── cURL-based fetcher ──────────────────────────────────────────────────────
+function curlFetch(url: string, cookies?: string): { status: number; body: string } {
+  const args = [
+    "-s", "-L", "--max-time", "30",
+    "-w", "\n%{http_code}",
+    "-H", `User-Agent: ${UA}`,
+    "-H", "Accept: application/json",
+    "-H", "Accept-Language: en-US,en;q=0.9",
+    "-H", "Referer: https://finance.yahoo.com",
+  ];
+  if (cookies) args.push("-H", `Cookie: ${cookies}`);
+  args.push(url);
+
+  const raw = execFileSync("/usr/bin/curl", args, { encoding: "utf-8", timeout: 35000 });
+  const lines = raw.trimEnd().split("\n");
+  const statusStr = lines.pop() ?? "0";
+  return { status: parseInt(statusStr, 10), body: lines.join("\n") };
+}
 
 // ─── Crumb management ────────────────────────────────────────────────────────
 let crumb: string | null = null;
@@ -47,55 +54,67 @@ async function ensureCrumb(): Promise<{ crumb: string; cookies: string }> {
   if (crumb && crumbCookies && Date.now() - crumbFetchedAt < 14400_000) {
     return { crumb, cookies: crumbCookies };
   }
-  // Fetch with backoff
-  const seedResp = await fetchWithBackoff("https://finance.yahoo.com", {
-    headers: { "User-Agent": UA, Accept: "text/html", "Accept-Language": "en-US,en;q=0.9" },
-    redirect: "follow",
-  });
-  const setCookieHeaders = seedResp.headers.getSetCookie?.() ?? (seedResp.headers.get("set-cookie")?.split(", ") ?? []);
-  const cookies = setCookieHeaders.map((c) => c.split(";")[0]).join("; ");
 
-  const crumbResp = await fetchWithBackoff("https://query2.finance.yahoo.com/v1/test/getcrumb", {
-    headers: { "User-Agent": UA, Referer: "https://finance.yahoo.com", Accept: "text/plain", Cookie: cookies },
-  });
-  const text = await crumbResp.text();
-  if (!text || text === "null") throw new Error("Crumb is empty");
+  // fc.yahoo.com sets A3 cookie even from TR/EU regions
+  const cookieJar = `/tmp/yf_md_cookies_${process.pid}.txt`;
+  execFileSync("/usr/bin/curl", [
+    "-s", "-c", cookieJar, "-o", "/dev/null",
+    "-H", `User-Agent: ${UA}`,
+    "https://fc.yahoo.com",
+  ], { encoding: "utf-8", timeout: 15000 });
 
-  crumb = text; crumbCookies = cookies; crumbFetchedAt = Date.now();
-  return { crumb: text, cookies };
-}
+  // Fetch crumb using cookie jar
+  const crumbRaw = execFileSync("/usr/bin/curl", [
+    "-s", "-b", cookieJar, "-w", "\n%{http_code}",
+    "-H", `User-Agent: ${UA}`, "-H", "Accept: text/plain",
+    "-H", "Referer: https://finance.yahoo.com",
+    "https://query2.finance.yahoo.com/v1/test/getcrumb",
+  ], { encoding: "utf-8", timeout: 15000 });
 
-// ─── Fetch with exponential backoff on 429 ───────────────────────────────────
-async function fetchWithBackoff(url: string, init?: RequestInit, retries = 4): Promise<Response> {
-  let delay = 1000;
-  for (let i = 0; i < retries; i++) {
-    const resp = await fetch(url, init);
-    if (resp.status !== 429) return resp;
-    // Check Retry-After header
-    const retryAfter = resp.headers.get("Retry-After");
-    const wait = retryAfter ? parseInt(retryAfter, 10) * 1000 : delay;
-    await sleep(Math.max(wait, delay));
-    delay *= 2;
+  const crumbLines = crumbRaw.trimEnd().split("\n");
+  const crumbStatus = parseInt(crumbLines.pop() ?? "0", 10);
+  const crumbText = crumbLines.join("").trim();
+
+  if (crumbStatus !== 200 || !crumbText || crumbText.includes("Too Many")) {
+    throw new Error(`Options verisi alınamıyor — crumb fetch failed (HTTP ${crumbStatus})`);
   }
-  throw new Error(`Yahoo 429 after ${retries} retries: ${url.split("?")[0]}`);
+
+  // Read cookies from jar (handle #HttpOnly_ prefix)
+  const { readFileSync, unlinkSync } = await import("fs");
+  const jarContent = readFileSync(cookieJar, "utf-8");
+  const cookies = jarContent.split("\n")
+    .map(l => l.startsWith("#HttpOnly_") ? l.slice(10) : l)
+    .filter(l => l && !l.startsWith("#") && l.includes("\t"))
+    .map(l => { const p = l.split("\t"); return p.length >= 7 ? `${p[5]}=${p[6]}` : ""; })
+    .filter(Boolean).join("; ");
+  try { unlinkSync(cookieJar); } catch {}
+
+  crumb = crumbText; crumbCookies = cookies; crumbFetchedAt = Date.now();
+  return { crumb: crumbText, cookies };
 }
 
-// ─── Low-level Yahoo JSON fetch (with crumb + backoff) ───────────────────────
+// ─── Low-level Yahoo JSON fetch ──────────────────────────────────────────────
 async function fetchYahooJSON(urlStr: string): Promise<unknown> {
+  const isChartAPI = urlStr.includes("/v8/finance/chart/");
+
+  if (isChartAPI) {
+    const result = curlFetch(urlStr);
+    if (result.status === 200) return JSON.parse(result.body);
+    if (result.status === 429) throw new Error(`Yahoo 429: ${urlStr}`);
+  }
+
+  // Options endpoints need crumb
   const { crumb: c, cookies } = await ensureCrumb();
   const sep = urlStr.includes("?") ? "&" : "?";
-  const fullURL = `${urlStr}${sep}crumb=${encodeURIComponent(c)}`;
+  const result = curlFetch(`${urlStr}${sep}crumb=${encodeURIComponent(c)}`, cookies);
 
-  const resp = await fetchWithBackoff(fullURL, {
-    headers: { "User-Agent": UA, Referer: "https://finance.yahoo.com", Accept: "application/json", Cookie: cookies },
-  });
-
-  if (resp.status === 401) {
+  if (result.status === 401) {
     crumb = null; crumbCookies = null; crumbFetchedAt = 0;
-    return fetchYahooJSON(urlStr); // retry with fresh crumb
+    throw new Error(`Yahoo 401 crumb expired`);
   }
-  if (!resp.ok) throw new Error(`Yahoo HTTP ${resp.status}`);
-  return resp.json();
+  if (result.status === 429) throw new Error(`Yahoo 429: ${urlStr}`);
+  if (result.status !== 200) throw new Error(`Yahoo HTTP ${result.status}`);
+  return JSON.parse(result.body);
 }
 
 // ─── Provider ────────────────────────────────────────────────────────────────
