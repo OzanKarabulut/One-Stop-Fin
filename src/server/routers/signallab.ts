@@ -322,7 +322,7 @@ export const signallabRouter = router({
       try {
         const expiryInfo = await marketData.getExpirations(ticker);
         const ts = expiryInfo.expirationTimestamps[expiry];
-        chain = await marketData.getChain(ticker, expiry, ts);
+        chain = await marketData.getChain(ticker, expiry, ts) as unknown as yahoo.OptionChain;
       } catch {
         chain = { ticker, price: quote.price, expiry, dte, calls: [], puts: [] };
       }
@@ -365,6 +365,76 @@ export const signallabRouter = router({
     .input(z.object({ ticker: z.string(), expiry: z.string(), expiryTimestamp: z.number().optional() }))
     .query(async ({ input }) => {
       return marketData.getChain(input.ticker, input.expiry, input.expiryTimestamp);
+    }),
+
+  // AI Strategy Scan — multi-ticker strategy finder
+  aiStrategyScan: publicProcedure
+    .input(z.object({
+      watchlist: z.enum(["all", "ozan", "custom"]).default("all"),
+      customTickers: z.string().optional(),
+      expiry: z.string(),
+      budget: z.number().default(100000),
+    }))
+    .query(async ({ input }) => {
+      let tickerStr: string;
+      switch (input.watchlist) {
+        case "ozan": tickerStr = OZAN_TICKERS; break;
+        case "custom": tickerStr = input.customTickers ?? ALL_TICKERS; break;
+        default: tickerStr = ALL_TICKERS;
+      }
+      const tickers = tickerStr.split(",").map((t) => t.trim().toUpperCase()).filter(Boolean);
+
+      const results: Array<{
+        ticker: string; price: number; strategies: ReturnType<typeof math.buildAIPick>["strategies"];
+        signals: ReturnType<typeof math.buildAIPick>["signals"];
+        debugReason: string;
+      }> = [];
+
+      for (const ticker of tickers) {
+        try {
+          const expDate = new Date(input.expiry + "T00:00:00Z");
+          const dte = Math.max(Math.ceil((expDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)), 0);
+
+          const [quote, hv, ivData] = await Promise.all([
+            yahoo.fetchQuote(ticker),
+            yahoo.fetchHV(ticker).catch(() => 0.25),
+            yahoo.fetchIVRank(ticker).catch(() => ({ ivRank: 50, currentIV: 25 })),
+          ]);
+
+          let chain: yahoo.OptionChain;
+          try {
+            const expiryInfo = await marketData.getExpirations(ticker);
+            const matchedExpiry = findBestExpiry(expiryInfo.expirations, input.expiry);
+            if (!matchedExpiry) { results.push({ ticker, price: quote.price, strategies: [], signals: {} as never, debugReason: "Vade bulunamadı" }); continue; }
+            const ts = expiryInfo.expirationTimestamps[matchedExpiry];
+            chain = await marketData.getChain(ticker, matchedExpiry, ts) as unknown as yahoo.OptionChain;
+          } catch {
+            chain = { ticker, price: quote.price, expiry: input.expiry, dte, calls: [], puts: [] };
+          }
+
+          const pick = math.buildAIPick(ticker, quote.price, input.expiry, dte, chain, hv, ivData.ivRank, ivData.currentIV);
+          results.push({ ticker, price: pick.price, strategies: pick.strategies, signals: pick.signals, debugReason: pick.debugInfo.reason });
+        } catch (err) {
+          results.push({ ticker, price: 0, strategies: [], signals: {} as never, debugReason: err instanceof Error ? err.message : "Hata" });
+        }
+      }
+
+      // Flatten all strategies, attach ticker info, sort by composite score
+      const allStrategies = results.flatMap((r) =>
+        r.strategies.map((s) => ({ ...s, ticker: r.ticker, tickerPrice: r.price, tickerSignals: r.signals }))
+      );
+      allStrategies.sort((a, b) => b.compositeScore - a.compositeScore);
+
+      // Budget filter: filter strategies where max loss exceeds budget
+      const affordable = allStrategies.filter((s) => Math.abs(s.maxLoss) <= input.budget);
+
+      return {
+        totalTickers: tickers.length,
+        scannedTickers: results.filter((r) => r.strategies.length > 0).length,
+        topStrategies: affordable.slice(0, 20),
+        allStrategies: affordable,
+        diagnostics: results.filter((r) => r.debugReason).map((r) => ({ ticker: r.ticker, reason: r.debugReason })),
+      };
     }),
 
   // Ticker lists
