@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/server/root";
 import {
-  DollarSign,
   TrendingUp,
   ShoppingCart,
   Trash2,
@@ -26,10 +25,13 @@ type Pick = CSPScan["topPicks"]["70-100"][number];
 type Group = CSPScan["groups"][number];
 
 type Mode = "mylist" | "all" | "custom";
-type SortKey = "score" | "maxIV" | "atmIV" | "maxYield" | "ticker";
+type SortKey = "score" | "maxIV" | "maxYield" | "ticker";
 
 const DEFAULT_CSP_LIST = "NASA,RKLB,DRAM,MRVL,NNE,AMBA,CBRS,OSCR,EOSE,BMNR,IREN,CLS,MU,CRDO,SNDK,AAOI,PENG,GLW";
-const IV_BUCKETS = ["70-100", "100-140", "140+"] as const;
+const IV_BUCKETS = ["all", "below-70", "70-100", "100-140", "140+"] as const;
+
+const usd = (n: number) => `${Math.round(n).toLocaleString("tr-TR")}$`;
+const otmPct = (spot: number, strike: number) => (spot > 0 ? ((spot - strike) / spot) * 100 : 0);
 
 function generateFridays(): { date: string; label: string }[] {
   const fridays: { date: string; label: string }[] = [];
@@ -57,129 +59,141 @@ function scoreColor(score: number): string {
   return "text-red-400";
 }
 
-function IVClassBadge({ ivClass }: { ivClass: number }) {
-  const colors: Record<number, string> = {
-    1: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
-    2: "bg-blue-500/20 text-blue-400 border-blue-500/30",
-    3: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
-    4: "bg-zinc-500/20 text-zinc-400 border-zinc-500/30",
+function QualityBadge({ grade }: { grade: string }) {
+  const colors: Record<string, string> = {
+    A: "bg-emerald-500/15 text-emerald-400",
+    B: "bg-blue-500/15 text-blue-400",
+    C: "bg-yellow-500/15 text-yellow-400",
   };
   return (
-    <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-bold border", colors[ivClass] ?? colors[4])}>
-      K{ivClass}
+    <span className={cn("rounded px-1.5 py-0.5 text-xs font-semibold", colors[grade] ?? "bg-zinc-500/15 text-zinc-400")}>
+      {grade}
     </span>
   );
 }
 
-function hitToStrike(spot: number, strike: number): number {
-  return spot > 0 ? ((spot - strike) / spot) * 100 : 0;
+function IVClassBadge({ ivClass }: { ivClass: number }) {
+  const colors: Record<number, string> = {
+    1: "bg-emerald-500/15 text-emerald-400",
+    2: "bg-blue-500/15 text-blue-400",
+    3: "bg-yellow-500/15 text-yellow-400",
+    4: "bg-zinc-500/15 text-zinc-400",
+  };
+  return <span className={cn("rounded px-1.5 py-0.5 text-xs font-semibold", colors[ivClass] ?? colors[4])}>K{ivClass}</span>;
+}
+
+function Metric({ label, value, color, align = "left" }: { label: string; value: string; color?: string; align?: "left" | "right" }) {
+  return (
+    <div className={align === "right" ? "text-right" : ""}>
+      <div className="text-xs text-white/40">{label}</div>
+      <div className={cn("text-sm font-semibold tabular-nums", color ?? "text-white")}>{value}</div>
+    </div>
+  );
 }
 
 function PickCard({ pick, budget, onAdd }: { pick: Pick; budget: number; onAdd: (p: Pick) => void }) {
   const contracts = pick.collateral > 0 ? Math.floor(budget / pick.collateral) : 0;
   const periodIncome = contracts * pick.executablePremiumAmount;
-  const hts = hitToStrike(pick.spot, pick.strike);
+  const breakeven = pick.strike - pick.premium / 100;
+  const note = pick.riskNotes?.[0];
+
   return (
-    <div className="rounded-lg border border-white/[0.08] bg-[#0e0e10] p-3 space-y-2">
+    <div className="rounded-lg border border-white/10 bg-[#0e0e10] p-3.5 space-y-3">
       <div className="flex items-start justify-between">
         <div>
-          <div className="text-sm font-bold text-white">
-            {pick.ticker} <span className="text-white/60">${pick.strike.toFixed(0)}P</span>
+          <div className="flex items-center gap-1.5 text-base font-semibold tracking-tight text-white">
+            {pick.ticker} <span className="text-white/50">{pick.strike.toFixed(0)}P</span>
+            <QualityBadge grade={pick.companyQuality} />
           </div>
-          <div className="text-[11px] text-white/40">
-            Spot: <span className="text-white/70">${pick.spot.toFixed(2)}</span>
-            {" · "}
-            <span className="text-blue-400">↓{hts.toFixed(1)}%</span>
-            {" · "}{pick.dte}g
-          </div>
+          <div className="mt-0.5 text-xs text-white/40 tabular-nums">Spot ${pick.spot.toFixed(2)} · {pick.dte} gün</div>
         </div>
-        <div className="flex flex-col items-center leading-none">
-          <span className={cn("text-xl font-bold tabular-nums", scoreColor(pick.cspScore))}>{pick.cspScore.toFixed(0)}</span>
-          <span className="text-[8px] uppercase tracking-wider text-white/30">skor</span>
-        </div>
+        <span className={cn("text-2xl font-bold tabular-nums tracking-tight", scoreColor(pick.cspScore))}>{pick.cspScore.toFixed(0)}</span>
       </div>
 
-      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-white/50">
-        <span>Prim: <b className="text-emerald-400 text-sm">${pick.executablePremiumAmount.toFixed(0)}</b></span>
-        <span>Getiri: <b className="text-emerald-400">{pick.yieldPct.toFixed(2)}%</b></span>
-        <span>IV: <b className="text-yellow-400">{pick.iv ? `${pick.iv.toFixed(0)}%` : "—"}</b></span>
-        <span>Buffer: <b className="text-blue-400">{hts.toFixed(1)}%</b></span>
-        <span>Delta: <b className="text-white">{pick.delta != null ? pick.delta.toFixed(2) : "—"}</b></span>
-        <span>P(ITM): <b className="text-white">{pick.probabilityITM != null ? `${pick.probabilityITM.toFixed(0)}%` : "—"}</b></span>
+      <div className="h-px bg-white/[0.07]" />
+
+      <div className="grid grid-cols-2 gap-x-3 gap-y-2.5">
+        <Metric label="Prim" value={usd(pick.executablePremiumAmount)} color="text-emerald-400" />
+        <Metric label="Getiri" value={`${pick.yieldPct.toFixed(2)}%`} color="text-emerald-400" align="right" />
+        <Metric label="IV" value={pick.iv ? `${pick.iv.toFixed(0)}%` : "—"} color="text-yellow-400" />
+        <Metric label="Buffer" value={`${otmPct(pick.spot, pick.strike).toFixed(0)}%`} align="right" />
+        <Metric label="Breakeven" value={`$${breakeven.toFixed(0)}`} />
+        <Metric label={`${contracts} kontrat`} value={usd(periodIncome)} color="text-emerald-400" align="right" />
       </div>
 
-      <div className="rounded bg-emerald-500/10 px-2 py-1 text-[11px] text-white/70">
-        💰 {contracts} kontrat → <b className="text-emerald-400">${periodIncome.toLocaleString()}</b>
-      </div>
+      {note && <div className="text-xs text-orange-400/80">⚠ {note}</div>}
 
       <button onClick={() => onAdd(pick)}
-        className="flex w-full items-center justify-center gap-1 rounded bg-emerald-500/20 py-1 text-[11px] font-medium text-emerald-400 hover:bg-emerald-500/30">
-        <ShoppingCart className="h-3 w-3" /> Sepete ekle
+        className="flex w-full items-center justify-center gap-1.5 rounded-md bg-emerald-500/15 py-1.5 text-sm font-medium text-emerald-400 hover:bg-emerald-500/25 transition-colors">
+        <ShoppingCart className="h-3.5 w-3.5" /> Sepete ekle
       </button>
     </div>
   );
 }
 
-/* ─── Collapsible Ticker Row ────────────────────────────────────────────── */
 function TickerGroup({ group, onAdd }: { group: Group; onAdd: (s: Pick) => void }) {
   const [open, setOpen] = useState(false);
+  const best = useMemo(() => group.strikes.reduce((a, b) => (b.cspScore > a.cspScore ? b : a), group.strikes[0]), [group.strikes]);
+
   return (
     <div className="border-b border-white/[0.06] last:border-b-0">
       <button onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between px-4 py-2.5 text-left hover:bg-white/[0.02] transition-colors">
+        className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-white/[0.02] transition-colors">
         <div className="flex items-center gap-3">
-          {open ? <ChevronDown className="h-3.5 w-3.5 text-white/40" /> : <ChevronRight className="h-3.5 w-3.5 text-white/40" />}
-          <span className="text-sm font-bold text-white">{group.ticker}</span>
-          <span className="text-xs text-white/50">${group.spot.toFixed(2)}</span>
+          {open ? <ChevronDown className="h-4 w-4 text-white/40" /> : <ChevronRight className="h-4 w-4 text-white/40" />}
+          <span className="text-sm font-semibold text-white">{group.ticker}</span>
+          <span className="text-sm text-white/50 tabular-nums">${group.spot.toFixed(2)}</span>
           <IVClassBadge ivClass={group.bestClass} />
         </div>
-        <div className="flex items-center gap-4 text-[11px] text-white/50">
-          <span>{group.strikes.length} kontrat</span>
-          {group.maxIV != null && <span>IV: <span className="text-yellow-400">{group.maxIV.toFixed(0)}%</span></span>}
-          <span>Max: <span className="text-emerald-400">{group.maxYield.toFixed(2)}%</span></span>
+        <div className="flex items-center gap-5 text-sm text-white/50 tabular-nums">
+          {best && (
+            <span className="hidden sm:inline">
+              En iyi <span className="text-white">${best.strike.toFixed(0)}P</span>
+              {" · "}<span className={scoreColor(best.cspScore)}>{best.cspScore.toFixed(0)}</span>
+            </span>
+          )}
+          {group.maxIV != null && <span>IV <span className="text-yellow-400">{group.maxIV.toFixed(0)}%</span></span>}
+          <span className="text-white/30">{group.strikes.length}</span>
         </div>
       </button>
 
       {open && (
         <div className="overflow-x-auto border-t border-white/[0.04]">
-          <table className="w-full text-xs">
+          <table className="w-full text-sm tabular-nums">
             <thead>
-              <tr className="border-b border-white/[0.06] text-white/40">
-                <th className="px-3 py-1.5 text-left font-medium">Strike</th>
-                <th className="px-3 py-1.5 text-center font-medium">Buffer</th>
-                <th className="px-3 py-1.5 text-right font-medium">Prim$</th>
-                <th className="px-3 py-1.5 text-right font-medium">Getiri%</th>
-                <th className="px-3 py-1.5 text-center font-medium">Skor</th>
-                <th className="px-3 py-1.5 text-right font-medium">IV%</th>
-                <th className="px-3 py-1.5 text-right font-medium">P(ITM)</th>
-                <th className="px-3 py-1.5 text-right font-medium">Last</th>
-                <th className="px-3 py-1.5 text-right font-medium">OI</th>
-                <th className="px-3 py-1.5 text-center font-medium"></th>
+              <tr className="border-b border-white/[0.06] text-xs text-white">
+                <th className="w-16 pl-4 pr-0 py-2 text-left font-medium">Strike</th>
+                <th className="pl-0 pr-2 py-2 text-center font-medium">Buffer</th>
+                <th className="px-2 py-2 text-center font-medium">Prim</th>
+                <th className="px-2 py-2 text-center font-medium">Getiri</th>
+                <th className="px-2 py-2 text-center font-medium">Skor</th>
+                <th className="px-2 py-2 text-center font-medium">IV</th>
+                <th className="px-2 py-2 text-center font-medium">Delta</th>
+                <th className="px-2 py-2 text-center font-medium">P(ITM)</th>
+                <th className="px-2 py-2 text-center font-medium">OI</th>
+                <th className="px-2 py-2 text-center font-medium"></th>
               </tr>
             </thead>
             <tbody>
-              {group.strikes.map((s) => {
-                const hts = hitToStrike(group.spot, s.strike);
-                return (
-                  <tr key={`${s.ticker}-${s.strike}`} className="border-b border-white/[0.03] hover:bg-white/[0.03]">
-                    <td className="px-3 py-1.5 font-medium text-white">${s.strike.toFixed(1)}</td>
-                    <td className="px-3 py-1.5 text-center text-blue-400">{hts.toFixed(1)}%</td>
-                    <td className="px-3 py-1.5 text-right font-bold text-emerald-400">${s.premium.toFixed(0)}</td>
-                    <td className="px-3 py-1.5 text-right text-emerald-400">{s.yieldPct.toFixed(2)}%</td>
-                    <td className="px-3 py-1.5 text-center"><span className={cn("font-bold", scoreColor(s.cspScore))}>{s.cspScore.toFixed(0)}</span></td>
-                    <td className="px-3 py-1.5 text-right text-yellow-400">{s.iv ? `${s.iv.toFixed(0)}%` : "—"}</td>
-                    <td className="px-3 py-1.5 text-right text-white/70">{s.probabilityITM != null ? `${s.probabilityITM.toFixed(0)}%` : "—"}</td>
-                    <td className="px-3 py-1.5 text-right text-white/60">{(s.last ?? s.mid)?.toFixed(2) ?? "—"}</td>
-                    <td className="px-3 py-1.5 text-right text-white/50">{s.oi > 0 ? s.oi.toLocaleString() : "—"}</td>
-                    <td className="px-3 py-1.5 text-center">
-                      <button onClick={() => onAdd(s)} title="Sepete ekle"
-                        className="rounded p-1 text-white/40 hover:bg-[#ff7200]/10 hover:text-[#ff7200]">
-                        <Plus className="h-3.5 w-3.5" />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
+              {group.strikes.map((s) => (
+                <tr key={`${s.ticker}-${s.strike}`} className="border-b border-white/[0.03] hover:bg-white/[0.03]">
+                  <td className="w-16 pl-4 pr-0 py-2 font-medium text-white">${s.strike.toFixed(1)}</td>
+                  <td className="pl-0 pr-2 py-2 text-center font-semibold text-[#ff7200]">{otmPct(group.spot, s.strike).toFixed(1).replace(".", ",")}%</td>
+                  <td className="px-2 py-2 text-center font-semibold text-emerald-400">{usd(s.premium)}</td>
+                  <td className="px-2 py-2 text-center text-emerald-400">{s.yieldPct.toFixed(2)}%</td>
+                  <td className="px-2 py-2 text-center"><span className={cn("font-semibold", scoreColor(s.cspScore))}>{s.cspScore.toFixed(0)}</span></td>
+                  <td className="px-2 py-2 text-center text-yellow-400">{s.iv ? `${s.iv.toFixed(0)}%` : "—"}</td>
+                  <td className="px-2 py-2 text-center text-white/60">{s.delta != null ? s.delta.toFixed(2) : "—"}</td>
+                  <td className="px-2 py-2 text-center text-white/60">{s.probabilityITM != null ? `${s.probabilityITM.toFixed(0)}%` : "—"}</td>
+                  <td className="px-2 py-2 text-center text-white/40">{s.oi > 0 ? s.oi.toLocaleString("tr-TR") : "—"}</td>
+                  <td className="px-2 py-2 text-center">
+                    <button onClick={() => onAdd(s)} title="Sepete ekle"
+                      className="rounded p-1 text-white/40 hover:bg-[#ff7200]/10 hover:text-[#ff7200]">
+                      <Plus className="h-4 w-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
@@ -188,12 +202,9 @@ function TickerGroup({ group, onAdd }: { group: Group; onAdd: (s: Pick) => void 
   );
 }
 
-/* ─── Floating Basket ───────────────────────────────────────────────────── */
-function FloatingBasket({ basket, onRemove, onUpdateQty, onClear }: {
-  basket: BasketItem[];
-  onRemove: (i: number) => void;
-  onUpdateQty: (i: number, d: number) => void;
-  onClear: () => void;
+function FloatingBasket({ basket, budget, onRemove, onUpdateQty, onClear }: {
+  basket: BasketItem[]; budget: number;
+  onRemove: (i: number) => void; onUpdateQty: (i: number, d: number) => void; onClear: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const totals = useMemo(() => {
@@ -201,66 +212,77 @@ function FloatingBasket({ basket, onRemove, onUpdateQty, onClear }: {
     const totalPremium = basket.reduce((s, b) => s + b.premium * b.qty, 0);
     const totalQty = basket.reduce((s, b) => s + b.qty, 0);
     const yieldPct = totalCollateral > 0 ? (totalPremium / totalCollateral) * 100 : 0;
-    return { totalCollateral, totalPremium, totalQty, yieldPct };
-  }, [basket]);
+    const budgetUse = budget > 0 ? (totalCollateral / budget) * 100 : 0;
+    return { totalCollateral, totalPremium, totalQty, yieldPct, budgetUse };
+  }, [basket, budget]);
 
   if (basket.length === 0) return null;
 
   return (
     <div className="fixed bottom-6 right-6 z-50">
       {open && (
-        <div className="mb-3 w-[380px] max-h-[60vh] overflow-hidden rounded-xl border border-white/[0.12] bg-[#0c0c0e] shadow-2xl flex flex-col">
-          <div className="flex items-center justify-between border-b border-white/[0.08] px-4 py-3">
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <ShoppingCart className="h-4 w-4 text-emerald-400" /> Sepet
+        <div className="mb-3 flex max-h-[70vh] w-[440px] flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#0c0c0e] shadow-2xl">
+          <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+            <h3 className="flex items-center gap-2 text-base font-bold text-white">
+              <ShoppingCart className="h-5 w-5 text-emerald-400" /> Sepet
             </h3>
-            <div className="flex items-center gap-2">
-              <button onClick={onClear} className="text-[10px] text-white/40 hover:text-red-400">Temizle</button>
-              <button onClick={() => setOpen(false)} className="text-white/40 hover:text-white"><X className="h-4 w-4" /></button>
+            <div className="flex items-center gap-3">
+              <button onClick={onClear} className="text-sm text-white/40 hover:text-red-400">Temizle</button>
+              <button onClick={() => setOpen(false)} className="text-white/40 hover:text-white"><X className="h-5 w-5" /></button>
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto divide-y divide-white/[0.04] px-4">
+          <div className="flex-1 divide-y divide-white/[0.05] overflow-y-auto px-5">
             {basket.map((item, idx) => (
-              <div key={item.id} className="flex items-center justify-between py-2 text-xs">
+              <div key={item.id} className="flex items-center justify-between py-3">
                 <div>
-                  <span className="font-medium text-white">{item.ticker}</span>
-                  <span className="text-white/50 ml-1.5">${item.strike}P</span>
-                  <span className="text-white/30 ml-1.5">{item.expiry}</span>
+                  <div className="text-sm font-semibold text-white">{item.ticker} <span className="text-white/50">${item.strike}P</span> <span className="text-[#ff7200] text-xs">B:{item.spot ? otmPct(item.spot, item.strike).toFixed(1).replace(".", ",") : "—"}%</span></div>
+                  <div className="text-xs text-white/40">{item.expiry} · {item.dte} gün</div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-emerald-400">${item.premium.toFixed(0)}</span>
-                  <div className="flex items-center gap-0.5">
-                    <button onClick={() => onUpdateQty(idx, -1)} className="rounded p-0.5 hover:bg-white/10"><Minus className="h-3 w-3 text-white/50" /></button>
-                    <span className="w-5 text-center text-white">{item.qty}</span>
-                    <button onClick={() => onUpdateQty(idx, 1)} className="rounded p-0.5 hover:bg-white/10"><Plus className="h-3 w-3 text-white/50" /></button>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-semibold tabular-nums text-emerald-400">{usd(item.premium * item.qty)}</span>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => onUpdateQty(idx, -1)} className="rounded-md p-1 hover:bg-white/10"><Minus className="h-4 w-4 text-white/60" /></button>
+                    <span className="w-6 text-center text-sm tabular-nums text-white">{item.qty}</span>
+                    <button onClick={() => onUpdateQty(idx, 1)} className="rounded-md p-1 hover:bg-white/10"><Plus className="h-4 w-4 text-white/60" /></button>
                   </div>
-                  <button onClick={() => onRemove(idx)} className="text-white/30 hover:text-red-400"><Trash2 className="h-3 w-3" /></button>
+                  <button onClick={() => onRemove(idx)} className="text-white/30 hover:text-red-400"><Trash2 className="h-4 w-4" /></button>
                 </div>
               </div>
             ))}
           </div>
 
-          <div className="border-t border-white/[0.08] px-4 py-3 grid grid-cols-3 gap-2 text-center">
-            <div><p className="text-[10px] text-white/40">Teminat</p><p className="text-xs font-bold text-white">${totals.totalCollateral.toLocaleString()}</p></div>
-            <div><p className="text-[10px] text-white/40">Prim</p><p className="text-xs font-bold text-emerald-400">${totals.totalPremium.toFixed(0)}</p></div>
-            <div><p className="text-[10px] text-white/40">Getiri</p><p className="text-xs font-bold text-emerald-400">{totals.yieldPct.toFixed(2)}%</p></div>
+          <div className="border-t border-white/10 px-5 py-4 space-y-3">
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div><p className="text-xs text-white/40">Teminat</p><p className="text-base font-bold tabular-nums text-white">{usd(totals.totalCollateral)}</p></div>
+              <div><p className="text-xs text-white/40">Prim</p><p className="text-base font-bold tabular-nums text-emerald-400">{usd(totals.totalPremium)}</p></div>
+              <div><p className="text-xs text-white/40">Getiri</p><p className="text-base font-bold tabular-nums text-emerald-400">{totals.yieldPct.toFixed(2)}%</p></div>
+            </div>
+            <div>
+              <div className="mb-1 flex justify-between text-xs text-white/40">
+                <span>Bütçe kullanımı</span>
+                <span className="tabular-nums">{usd(totals.totalCollateral)} / {usd(budget)} · %{totals.budgetUse.toFixed(0)}</span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                <div className={cn("h-full rounded-full", totals.budgetUse > 100 ? "bg-red-500" : "bg-[#ff7200]")}
+                  style={{ width: `${Math.min(100, totals.budgetUse)}%` }} />
+              </div>
+            </div>
           </div>
         </div>
       )}
 
       <button onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 rounded-full bg-[#ff7200] px-5 py-3 font-semibold text-white shadow-lg hover:bg-[#ff8c3a] transition-colors">
+        className="flex items-center gap-2.5 rounded-full bg-[#ff7200] px-6 py-3.5 text-base font-semibold text-white shadow-lg hover:bg-[#ff8c3a] transition-colors">
         <ShoppingCart className="h-5 w-5" />
-        <span>{totals.totalQty}</span>
-        <span className="text-white/70 text-sm">·</span>
-        <span className="text-sm">${totals.totalPremium.toFixed(0)}</span>
+        <span className="tabular-nums">{totals.totalQty}</span>
+        <span className="text-white/60">·</span>
+        <span className="tabular-nums">{usd(totals.totalPremium)}</span>
       </button>
     </div>
   );
 }
 
-/* ─── Main Page ─────────────────────────────────────────────────────────── */
 export default function CSPScreenerPage() {
   const fridays = useMemo(() => generateFridays(), []);
   const [mode, setMode] = useState<Mode>(() => {
@@ -292,7 +314,7 @@ export default function CSPScreenerPage() {
   const [hideK4, setHideK4] = useState(false);
   const [basket, setBasket] = useState<BasketItem[]>(() => {
     if (typeof window !== "undefined") {
-      try { const s = localStorage.getItem("csp_basket"); if (s) return JSON.parse(s); } catch {}
+      try { const s = localStorage.getItem("csp_basket"); if (s) return JSON.parse(s) as BasketItem[]; } catch { /* ignore */ }
     }
     return [];
   });
@@ -304,7 +326,7 @@ export default function CSPScreenerPage() {
     return { watchlist: "custom" as const, customTickers: cspList, expiry, minOI };
   }, [mode, customTickers, cspList, expiry, minOI]);
 
-  const { data, refetch, isFetching } = trpc.signallab.cspScan.useQuery(scanInput, { enabled: false, refetchOnWindowFocus: false });
+  const { data, error, refetch, isFetching } = trpc.signallab.cspScan.useQuery(scanInput, { enabled: false, refetchOnWindowFocus: false });
 
   const handleScan = useCallback(async () => { setScanning(true); await refetch(); setScanning(false); }, [refetch]);
   const isLoading = isFetching || scanning;
@@ -322,13 +344,12 @@ export default function CSPScreenerPage() {
     if (hideK4) groups = groups.filter((g) => g.bestClass <= 3);
     switch (sortKey) {
       case "maxIV": groups.sort((a, b) => (b.maxIV ?? -1) - (a.maxIV ?? -1)); break;
-      case "atmIV": groups.sort((a, b) => (b.atmIV ?? -1) - (a.atmIV ?? -1)); break;
       case "maxYield": groups.sort((a, b) => b.maxYield - a.maxYield); break;
       case "ticker": groups.sort((a, b) => a.ticker.localeCompare(b.ticker)); break;
       default: groups.sort((a, b) => {
-        const aScore = Math.max(...a.strikes.map(s => s.cspScore));
-        const bScore = Math.max(...b.strikes.map(s => s.cspScore));
-        return bScore - aScore;
+        const aS = Math.max(...a.strikes.map((s) => s.cspScore));
+        const bS = Math.max(...b.strikes.map((s) => s.cspScore));
+        return bS - aS;
       });
     }
     return groups;
@@ -343,90 +364,133 @@ export default function CSPScreenerPage() {
     });
   }, []);
 
-  const hasPicks = data?.topPicks && IV_BUCKETS.some((b) => data.topPicks[b].length > 0);
+  const hasPicks = data?.topPicks && data.topPicks["all"].length > 0;
+  const inputClass = "rounded-md border border-white/10 bg-[#050505] px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-[#ff7200]/50";
+  const labelClass = "text-xs font-medium text-white/40";
 
   return (
-    <div className="space-y-6 pb-24">
-      {/* Header */}
+    <div className="space-y-6 pb-28">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">CSP Fırsat Motoru</h1>
-          <p className="text-sm text-white/50">Max prim / min assignment — cash-secured put taraması</p>
+          <h1 className="text-2xl font-bold tracking-tight text-white">CSP Fırsat Motoru</h1>
+          <p className="mt-1 text-sm text-white/40">Max prim / min assignment — cash-secured put taraması</p>
         </div>
-        {data && <p className="text-xs text-white/40">{data.totalContracts} kontrat · {data.groups.length} ticker</p>}
+        {data && <p className="text-sm text-white/40 tabular-nums">{data.totalContracts} kontrat · {data.groups.length} ticker</p>}
       </div>
 
-      {/* Filter Bar */}
-      <div className="rounded-lg border border-white/[0.08] bg-[#0b0b0c] p-4">
+      <div className="rounded-xl border border-white/10 bg-[#0b0b0c] p-4">
         <div className="flex flex-wrap items-end gap-4">
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-white/50">Watchlist</label>
+          <div className="space-y-1.5">
+            <label className={labelClass}>Watchlist</label>
             <div className="flex items-center gap-1">
               {(["mylist", "all", "custom"] as const).map((m) => (
                 <button key={m} onClick={() => setMode(m)}
-                  className={cn("rounded px-3 py-1.5 text-xs font-medium", mode === m ? "bg-[#ff7200] text-white" : "bg-white/5 text-white/60 hover:bg-white/10")}>
+                  className={cn("rounded-md px-3 py-2 text-sm font-medium transition-colors", mode === m ? "bg-[#ff7200] text-white" : "bg-white/5 text-white/60 hover:bg-white/10")}>
                   {m === "mylist" ? "CSP Listem" : m === "all" ? "Tümü" : "Özel"}
                 </button>
               ))}
-              <button onClick={() => setEditingList((v) => !v)} className="rounded p-1.5 text-white/40 hover:bg-white/10 hover:text-white">
-                <Pencil className="h-3.5 w-3.5" />
+              <button onClick={() => setEditingList((v) => !v)} title="Listeyi düzenle" className="rounded-md p-2 text-white/40 hover:bg-white/10 hover:text-white">
+                <Pencil className="h-4 w-4" />
               </button>
             </div>
           </div>
+
           {editingList && (
-            <div className="w-full space-y-1">
-              <label className="text-xs font-medium text-white/50">CSP Listem (virgülle)</label>
-              <textarea value={cspList} onChange={(e) => setCspList(e.target.value.toUpperCase())} rows={2}
-                className="w-full rounded border border-white/[0.08] bg-[#050505] px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-[#ff7200]/50" />
+            <div className="w-full space-y-1.5">
+              <label className={labelClass}>CSP Listem (virgülle)</label>
+              <textarea value={cspList} onChange={(e) => setCspList(e.target.value.toUpperCase())} rows={2} className={cn(inputClass, "w-full")} />
             </div>
           )}
+
           {mode === "custom" && (
-            <div className="flex-1 min-w-[200px] space-y-1">
-              <label className="text-xs font-medium text-white/50">Tickers</label>
-              <input type="text" value={customTickers} onChange={(e) => setCustomTickers(e.target.value)} placeholder="TSLA,NVDA..."
-                className="w-full rounded border border-white/[0.08] bg-[#050505] px-3 py-1.5 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-1 focus:ring-[#ff7200]/50" />
+            <div className="min-w-[200px] flex-1 space-y-1.5">
+              <label className={labelClass}>Tickers</label>
+              <input type="text" value={customTickers} onChange={(e) => setCustomTickers(e.target.value)} placeholder="TSLA,NVDA..." className={cn(inputClass, "w-full")} />
             </div>
           )}
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-white/50">Bütçe ($)</label>
-            <input type="number" value={budget} onChange={(e) => setBudget(Number(e.target.value))} min={0} step={10000}
-              className="w-28 rounded border border-white/[0.08] bg-[#050505] px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-[#ff7200]/50" />
+
+          <div className="space-y-1.5">
+            <label className={labelClass}>Bütçe</label>
+            <input type="text" inputMode="numeric" value={usd(budget)}
+              onChange={(e) => setBudget(Number(e.target.value.replace(/[^\d]/g, "")) || 0)}
+              className={cn(inputClass, "w-32 tabular-nums")} />
           </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-white/50">Vade</label>
-            <select value={expiry} onChange={(e) => setExpiry(e.target.value)}
-              className="rounded border border-white/[0.08] bg-[#050505] px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-[#ff7200]/50">
+
+          <div className="space-y-1.5">
+            <label className={labelClass}>Vade</label>
+            <select value={expiry} onChange={(e) => setExpiry(e.target.value)} className={inputClass}>
               {fridays.map((f) => <option key={f.date} value={f.date}>{f.label}</option>)}
             </select>
           </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-white/50">Min OI</label>
-            <input type="number" value={minOI} onChange={(e) => setMinOI(Number(e.target.value))} min={0}
-              className="w-20 rounded border border-white/[0.08] bg-[#050505] px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-[#ff7200]/50" />
+
+          <div className="space-y-1.5">
+            <label className={labelClass}>Min OI</label>
+            <input type="number" value={minOI} onChange={(e) => setMinOI(Number(e.target.value))} min={0} className={cn(inputClass, "w-24 tabular-nums")} />
           </div>
+
           <button onClick={handleScan} disabled={isLoading}
-            className="flex items-center gap-2 rounded bg-[#ff7200] px-5 py-1.5 text-sm font-semibold text-white hover:bg-[#ff8c3a] disabled:opacity-50">
+            className="flex items-center gap-2 rounded-md bg-[#ff7200] px-6 py-2 text-sm font-semibold text-white hover:bg-[#ff8c3a] disabled:opacity-50">
             {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <TrendingUp className="h-4 w-4" />}
             {isLoading ? "Taranıyor..." : "Tara"}
           </button>
         </div>
       </div>
 
-      {/* ─── En İyi Fırsatlar (Framed) ─────────────────────────────────────── */}
+      {error && (
+        <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+          <AlertTriangle className="h-4 w-4 shrink-0" /> Tarama başarısız: {error.message}
+        </div>
+      )}
+
+      {isLoading && !data && (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          {[0, 1, 2].map((c) => (
+            <div key={c} className="space-y-3">
+              <div className="h-3 w-20 rounded bg-white/10" />
+              {[0, 1].map((i) => <div key={i} className="h-40 animate-pulse rounded-lg border border-white/10 bg-[#0e0e10]" />)}
+            </div>
+          ))}
+        </div>
+      )}
+
       {hasPicks && (
-        <div className="rounded-xl border-2 border-[#ff7200]/30 bg-[#0a0a0c] p-5 space-y-4">
-          <h2 className="flex items-center gap-2 text-sm font-bold text-white">
+        <details open className="rounded-2xl border border-[#ff7200]/30 bg-[#0a0a0c]">
+          <summary className="flex cursor-pointer items-center gap-2 p-5 text-sm font-bold text-white select-none">
             <Target className="h-4 w-4 text-[#ff7200]" /> En İyi Fırsatlar
-            <span className="text-white/30 font-normal ml-2 text-[11px]">IV kovasına göre top 3</span>
-          </h2>
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-            {IV_BUCKETS.map((bucket) => {
+          </summary>
+          <div className="px-5 pb-5 space-y-5">
+          {/* Top 3 overall */}
+          {data!.topPicks["all"].length > 0 && (
+            <div className="space-y-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-[#ff7200]/70">🏆 Tüm Kontratlar Arasında En İyi 3</h3>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                {data!.topPicks["all"].map((p, i) => <PickCard key={`all-${p.ticker}-${p.strike}-${i}`} pick={p} budget={budget} onAdd={addToBasket} />)}
+              </div>
+            </div>
+          )}
+          {/* IV bucket breakdown */}
+          <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-4">
+            {(["below-70", "70-100", "100-140", "140+"] as const).map((bucket) => {
               const picks = data!.topPicks[bucket];
+              const colors: Record<string, string> = {
+                "below-70": "border-blue-500/40 bg-blue-500/[0.03]",
+                "70-100": "border-emerald-500/40 bg-emerald-500/[0.03]",
+                "100-140": "border-yellow-500/40 bg-yellow-500/[0.03]",
+                "140+": "border-red-500/40 bg-red-500/[0.03]",
+              };
+              const badgeColors: Record<string, string> = {
+                "below-70": "bg-blue-500/20 text-blue-300 border-blue-500/30",
+                "70-100": "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
+                "100-140": "bg-yellow-500/20 text-yellow-300 border-yellow-500/30",
+                "140+": "bg-red-500/20 text-red-300 border-red-500/30",
+              };
               return (
-                <div key={bucket} className="space-y-2">
-                  <h3 className="text-xs font-semibold text-white/60">IV {bucket}%</h3>
+                <div key={bucket} className={cn("rounded-xl border p-3 space-y-3", colors[bucket])}>
+                  <div className={cn("inline-block rounded-md border px-2.5 py-1 text-xs font-bold uppercase tracking-wide", badgeColors[bucket])}>
+                    IV {bucket === "below-70" ? "<70" : bucket}%
+                  </div>
                   {picks.length === 0 ? (
-                    <div className="rounded-lg border border-dashed border-white/10 p-4 text-center text-[11px] text-white/30">Uygun fırsat yok</div>
+                    <div className="flex h-40 items-center justify-center rounded-lg border border-dashed border-white/10 text-sm text-white/30">Uygun fırsat yok</div>
                   ) : (
                     picks.map((p, i) => <PickCard key={`${p.ticker}-${p.strike}-${i}`} pick={p} budget={budget} onAdd={addToBasket} />)
                   )}
@@ -434,48 +498,44 @@ export default function CSPScreenerPage() {
               );
             })}
           </div>
-        </div>
+          </div>
+        </details>
       )}
 
-      {/* ─── Tüm Kontratlar (Collapsible Ticker Rows) ──────────────────────── */}
       {filteredGroups.length > 0 && (
-        <div className="rounded-xl border border-white/[0.08] bg-[#0a0a0c] overflow-hidden">
-          <div className="flex items-center justify-between border-b border-white/[0.08] px-4 py-3">
+        <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#0a0a0c]">
+          <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
             <h2 className="text-sm font-bold text-white">Tüm Kontratlar</h2>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-4">
               <select value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)}
-                className="rounded border border-white/[0.08] bg-[#050505] px-2 py-1 text-[11px] text-white focus:outline-none">
+                className="rounded-md border border-white/10 bg-[#050505] px-2.5 py-1.5 text-xs text-white focus:outline-none">
                 <option value="score">Skor</option>
                 <option value="maxIV">Max IV</option>
                 <option value="maxYield">Max Getiri</option>
                 <option value="ticker">Ticker</option>
               </select>
-              <label className="flex items-center gap-1.5 text-[11px] text-white/50 cursor-pointer">
-                <input type="checkbox" checked={hideK4} onChange={(e) => setHideK4(e.target.checked)} className="rounded border-white/20 h-3 w-3" />
+              <label className="flex cursor-pointer items-center gap-1.5 text-xs text-white/50">
+                <input type="checkbox" checked={hideK4} onChange={(e) => setHideK4(e.target.checked)} className="h-3.5 w-3.5 rounded border-white/20" />
                 K4 gizle
               </label>
-              <span className="text-[11px] text-white/30">{filteredGroups.length} ticker</span>
+              <span className="text-xs text-white/30 tabular-nums">{filteredGroups.length} ticker</span>
             </div>
           </div>
-
-          <div className="divide-y divide-white/[0.04]">
-            {filteredGroups.map((group) => (
-              <TickerGroup key={group.ticker} group={group} onAdd={addToBasket} />
-            ))}
+          <div>
+            {filteredGroups.map((group) => <TickerGroup key={group.ticker} group={group} onAdd={addToBasket} />)}
           </div>
         </div>
       )}
 
-      {/* Diagnostics */}
       {data?.diagnostics && data.diagnostics.some((d) => d.reason) && (
-        <details className="rounded-lg border border-white/[0.08] bg-[#0b0b0c]">
-          <summary className="flex cursor-pointer items-center gap-2 px-4 py-2 text-xs font-medium text-white/50">
-            <AlertTriangle className="h-3.5 w-3.5" /> Diagnostics ({data.diagnostics.filter((d) => d.reason).length})
+        <details className="rounded-lg border border-white/10 bg-[#0b0b0c]">
+          <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm font-medium text-white/50">
+            <AlertTriangle className="h-4 w-4" /> Diagnostics ({data.diagnostics.filter((d) => d.reason).length})
           </summary>
-          <div className="space-y-1 px-4 pb-3">
+          <div className="space-y-1.5 px-4 pb-3">
             {data.diagnostics.filter((d) => d.reason).map((d) => (
-              <div key={d.ticker} className="flex items-center gap-2 text-xs">
-                <span className="w-12 font-medium text-white">{d.ticker}</span>
+              <div key={d.ticker} className="flex items-center gap-3 text-sm">
+                <span className="w-14 font-medium text-white">{d.ticker}</span>
                 <span className="text-white/50">{d.reason}</span>
               </div>
             ))}
@@ -483,17 +543,16 @@ export default function CSPScreenerPage() {
         </details>
       )}
 
-      {/* Empty State */}
-      {!data && !isLoading && (
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <Target className="mb-4 h-12 w-12 text-white/20" />
-          <p className="text-sm text-white/50">Watchlist ve vade seçip <span className="text-[#ff7200]">Tara</span>&apos;ya basın</p>
+      {!data && !isLoading && !error && (
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <Target className="mb-4 h-12 w-12 text-white/15" />
+          <p className="text-sm text-white/40">Watchlist ve vade seçip <span className="text-[#ff7200]">Tara</span>&apos;ya basın</p>
         </div>
       )}
 
-      {/* Floating Basket */}
       <FloatingBasket
         basket={basket}
+        budget={budget}
         onRemove={(i) => setBasket((prev) => prev.filter((_, idx) => idx !== i))}
         onUpdateQty={(i, d) => setBasket((prev) => { const c = [...prev]; c[i] = { ...c[i], qty: Math.max(1, c[i].qty + d) }; return c; })}
         onClear={() => setBasket([])}

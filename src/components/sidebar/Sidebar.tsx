@@ -25,7 +25,7 @@ function SubItem({ href, label, isActive, starred, onStar }: { href: string; lab
   return (
     <div className={`group flex items-center h-[38px] pl-[42px] pr-3 transition-colors cursor-pointer ${isActive ? "bg-[#141414] border-l-2 border-[#ff7200]" : "hover:bg-white/[0.03] border-l-2 border-transparent"}`}
       onClick={() => router.push(href)}>
-      <span className={`text-[14px] flex-1 ${isActive ? "text-[#ff7200] font-medium" : "text-[#b9b9b9]"}`}>{label}</span>
+      <span className={`text-sm flex-1 tracking-tight ${isActive ? "text-[#ff7200] font-bold" : "text-white font-semibold"}`}>{label}</span>
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); onStar(); }}
@@ -72,27 +72,27 @@ export function Sidebar() {
         <div className="w-7 h-7 rounded-md bg-[#ff7200] flex items-center justify-center">
           <span className="text-white text-sm font-bold">O</span>
         </div>
-        <div className="text-[14px] font-semibold text-white/90">One-Stop-Fin</div>
+        <div className="text-base font-bold tracking-tight text-white">One-Stop-Fin</div>
       </div>
 
       {/* Home */}
       <Link href="/dashboard"
-        className={`flex items-center h-[44px] px-4 gap-3 transition-colors ${pathname === "/dashboard" ? "bg-[#141414] text-[#ff7200]" : "text-[#e0e0e0] hover:bg-white/[0.03]"}`}>
-        <Home size={18} />
-        <span className="text-[14px] font-medium">Ana Sayfa</span>
+        className={`flex items-center h-[44px] px-4 gap-3 transition-colors ${pathname === "/dashboard" ? "bg-[#141414] text-[#ff7200]" : "text-white hover:bg-white/[0.03]"}`}>
+        <Home size={18} className="text-[#ff7200]" />
+        <span className="text-base font-bold tracking-tight">Ana Sayfa</span>
       </Link>
 
       {/* Favorites */}
       {favorites.length > 0 && (
         <div className="border-b border-white/[0.06] py-2">
-          <div className="flex items-center h-[32px] px-4 gap-2">
-            <Star size={14} className="text-[#ff7200]/80" />
-            <span className="text-[13px] font-medium text-white/50">Favoriler</span>
+          <div className="flex items-center h-[44px] px-4 gap-3">
+            <Star size={18} className="text-[#ff7200]" />
+            <span className="text-base font-bold tracking-tight text-white">Favoriler</span>
           </div>
           {favorites.map((fav) => (
             <div key={fav.href} className={`group flex items-center h-[38px] px-4 pl-[42px] ${pathname === fav.href ? "bg-[#141414]" : "hover:bg-white/[0.03]"}`}>
               <Link href={fav.href}
-                className={`text-[14px] flex-1 ${pathname === fav.href ? "text-[#ff7200] font-medium" : "text-[#b9b9b9] hover:text-white"}`}>
+                className={`text-sm font-semibold tracking-tight flex-1 ${pathname === fav.href ? "text-[#ff7200] font-bold" : "text-white"}`}>
                 {fav.labelKey}
               </Link>
               <button onClick={() => removeFav(fav.href)} className="opacity-0 group-hover:opacity-100 text-white/30 hover:text-red-400 p-1">
@@ -113,7 +113,7 @@ export function Sidebar() {
               <button onClick={() => toggle(mod.id)}
                 className={`flex items-center w-full h-[44px] px-4 gap-3 transition-colors ${isExp ? "text-white" : "text-[#ccc] hover:bg-white/[0.03]"}`}>
                 <Icon size={18} className={isExp ? "text-[#ff7200]" : ""} />
-                <span className="text-[14px] font-medium">{mod.id === "signallab" ? "SignalLab" : "FinSumy"}</span>
+                <span className="text-base font-bold tracking-tight">{mod.id === "signallab" ? "SignalLab" : "FinSumy"}</span>
                 {isExp ? <ChevronDown size={14} className="ml-auto text-white/30" /> : <ChevronRight size={14} className="ml-auto text-white/30" />}
               </button>
               {isExp && (

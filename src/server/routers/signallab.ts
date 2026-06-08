@@ -158,8 +158,8 @@ async function fetchCSPTicker(
       const ask = put.ask;
       const last = put.last;
       let mid: number;
-      if (bid > 0 && ask > 0) mid = (bid + ask) / 2;
-      else if (last > 0) mid = last;
+      if (last > 0) mid = last;
+      else if (bid > 0 && ask > 0) mid = (bid + ask) / 2;
       else continue;
       hasMid++;
 
@@ -275,10 +275,13 @@ export const signallabRouter = router({
       for (const c of allContracts) classDist[c.ivClass as 1|2|3|4]++;
 
       const sortByScore = (a: CSPContract, b: CSPContract) => b.cspScore - a.cspScore || b.executablePremiumAmount - a.executablePremiumAmount;
+      const eligible = allContracts.filter((c) => !c.rejected && c.cspScore > 0);
       const topPicks = {
-        "70-100": allContracts.filter((c) => !c.rejected && c.ivBucket === "70-100").sort(sortByScore).slice(0, 3),
-        "100-140": allContracts.filter((c) => !c.rejected && c.ivBucket === "100-140").sort(sortByScore).slice(0, 3),
-        "140+": allContracts.filter((c) => !c.rejected && c.ivBucket === "140+").sort(sortByScore).slice(0, 3),
+        "all": eligible.sort(sortByScore).slice(0, 3),
+        "below-70": eligible.filter((c) => c.ivBucket === "below-70").sort(sortByScore).slice(0, 3),
+        "70-100": eligible.filter((c) => c.ivBucket === "70-100").sort(sortByScore).slice(0, 3),
+        "100-140": eligible.filter((c) => c.ivBucket === "100-140").sort(sortByScore).slice(0, 3),
+        "140+": eligible.filter((c) => c.ivBucket === "140+").sort(sortByScore).slice(0, 3),
       };
 
       return { groups, topPicks, diagnostics: allDiags.sort((a, b) => a.ticker.localeCompare(b.ticker)), classDist, totalContracts: allContracts.length };

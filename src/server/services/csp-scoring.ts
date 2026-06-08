@@ -40,8 +40,8 @@ export function scoreCSPContract(input: CSPScoringInput): CSPScoringResult {
   const company = getCSPCompanyQuality(input.ticker);
   const ivBucket = getIVBucket(input.iv);
 
-  // Executable premium (use bid, which is what you actually get)
-  const executablePremium = input.bid > 0 ? input.bid : input.mid;
+  // Executable premium (use mid which is last-price based)
+  const executablePremium = input.mid;
   const executablePremiumAmount = executablePremium * 100;
   const spreadPct = input.bid > 0 && input.ask > 0 && input.mid > 0 ? ((input.ask - input.bid) / input.mid) * 100 : null;
 
@@ -70,21 +70,22 @@ export function scoreCSPContract(input: CSPScoringInput): CSPScoringResult {
   // ─── Rejections ────────────────────────────────────────────────────────────
   let rejected = false, rejectReason: string | null = null;
 
-  if (company.grade === "D" || company.grade === "X") {
-    rejected = true; rejectReason = `Company grade ${company.grade} — avoid assignment`;
-    riskNotes.push("Low quality / avoid assignment");
+  if (company.grade === "X") {
+    rejected = true; rejectReason = `Company grade X — avoid assignment`;
+    riskNotes.push("Delisted / avoid assignment");
   }
-  if (spreadPct !== null && spreadPct > 12) {
-    rejected = true; rejectReason = "Spread > 12% — illiquid";
-    riskNotes.push("Spread too wide (>12%)");
+  if (spreadPct !== null && spreadPct > 25) {
+    // Low-priced options ($0.05 tick) naturally have wide % spreads — use absolute spread for mid < $2
+    const absSpread = input.ask - input.bid;
+    const spreadReject = input.mid < 2 ? absSpread > 0.50 : spreadPct > 25;
+    if (spreadReject) {
+      rejected = true; rejectReason = "Spread too wide — illiquid";
+      riskNotes.push("Spread too wide");
+    }
   }
   if (input.oi >= 0 && input.oi < 20) {
     rejected = true; rejectReason = "OI < 20 — illiquid";
     riskNotes.push("Very low OI");
-  }
-  if (input.bid <= 0) {
-    rejected = true; rejectReason = "No bid";
-    riskNotes.push("No bid quote");
   }
 
   // ─── Risk notes ────────────────────────────────────────────────────────────
@@ -135,11 +136,11 @@ export function scoreCSPContract(input: CSPScoringInput): CSPScoringResult {
   if (company.grade === "A") qualityScore = 100;
   else if (company.grade === "B") qualityScore = 80;
   else if (company.grade === "C") qualityScore = 50;
-  // D/X already rejected
+  else if (company.grade === "D") { qualityScore = 20; riskNotes.push("D-grade — assignment risky"); }
 
   // ─── LIQUIDITY SCORE (10%) ─────────────────────────────────────────────────
   const liquidityScore = clamp(
-    0.5 * (spreadPct === null ? 30 : clamp(100 - (spreadPct / 12) * 100)) +
+    0.5 * (spreadPct === null ? 30 : clamp(100 - (spreadPct / 25) * 100)) +
     0.3 * (input.oi < 0 ? 40 : scaleUp(input.oi, 20, 500)) +
     0.2 * (input.volume < 0 ? 30 : scaleUp(input.volume, 5, 100))
   );

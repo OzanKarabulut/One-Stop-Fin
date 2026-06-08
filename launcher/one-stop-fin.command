@@ -2,7 +2,7 @@
 # One-Stop-Fin — Tek Tık Launcher (Docker'sız)
 PROJECT_DIR="/Users/eozakar/Desktop/DevelopmentWorks/One-Stop-Fin"
 HEALTH_URL="http://localhost:3000/api/health"
-MAX_WAIT=90
+MAX_WAIT=30
 
 cd "$PROJECT_DIR" || { osascript -e 'display alert "One-Stop-Fin" message "Proje dizini bulunamadı."'; exit 1; }
 
@@ -31,7 +31,7 @@ trap "kill $APP_PID 2>/dev/null; wait $APP_PID 2>/dev/null; exit 0" INT TERM EXI
 # --- Health check bekle ---
 SECONDS=0
 while ! curl -sf "$HEALTH_URL" >/dev/null 2>&1; do
-  sleep 2
+  sleep 1
   if [ $SECONDS -ge $MAX_WAIT ]; then
     osascript -e 'display alert "One-Stop-Fin" message "Uygulama başlatılamadı (timeout)." buttons {"Tamam"} default button "Tamam"'
     kill $APP_PID 2>/dev/null
