@@ -66,7 +66,7 @@ function QualityBadge({ grade }: { grade: string }) {
     C: "bg-yellow-500/15 text-yellow-400",
   };
   return (
-    <span className={cn("rounded px-1.5 py-0.5 text-xs font-semibold", colors[grade] ?? "bg-zinc-500/15 text-zinc-400")}>
+    <span className={cn("rounded px-1.5 py-0.5 text-xs font-bold", colors[grade] ?? "bg-zinc-500/15 text-zinc-400")}>
       {grade}
     </span>
   );
@@ -79,14 +79,14 @@ function IVClassBadge({ ivClass }: { ivClass: number }) {
     3: "bg-yellow-500/15 text-yellow-400",
     4: "bg-zinc-500/15 text-zinc-400",
   };
-  return <span className={cn("rounded px-1.5 py-0.5 text-xs font-semibold", colors[ivClass] ?? colors[4])}>K{ivClass}</span>;
+  return <span className={cn("rounded px-1.5 py-0.5 text-xs font-bold", colors[ivClass] ?? colors[4])}>K{ivClass}</span>;
 }
 
 function Metric({ label, value, color, align = "left" }: { label: string; value: string; color?: string; align?: "left" | "right" }) {
   return (
     <div className={align === "right" ? "text-right" : ""}>
-      <div className="text-xs text-white/40">{label}</div>
-      <div className={cn("text-sm font-semibold tabular-nums", color ?? "text-white")}>{value}</div>
+      <div className="text-xs font-bold text-white/90">{label}</div>
+      <div className={cn("text-sm font-bold tabular-nums", color ?? "text-white")}>{value}</div>
     </div>
   );
 }
@@ -101,11 +101,11 @@ function PickCard({ pick, budget, onAdd }: { pick: Pick; budget: number; onAdd: 
     <div className="rounded-lg border border-white/10 bg-[#0e0e10] p-3.5 space-y-3">
       <div className="flex items-start justify-between">
         <div>
-          <div className="flex items-center gap-1.5 text-base font-semibold tracking-tight text-white">
-            {pick.ticker} <span className="text-white/50">{pick.strike.toFixed(0)}P</span>
+          <div className="flex items-center gap-1.5 text-base font-bold tracking-tight text-white">
+            {pick.ticker} <span className="text-white/90">{pick.strike.toFixed(0)}P</span>
             <QualityBadge grade={pick.companyQuality} />
           </div>
-          <div className="mt-0.5 text-xs text-white/40 tabular-nums">Spot ${pick.spot.toFixed(2)} · {pick.dte} gün</div>
+          <div className="mt-0.5 text-xs font-bold text-white/90 tabular-nums">Spot ${pick.spot.toFixed(2)} · {pick.dte} gün</div>
         </div>
         <span className={cn("text-2xl font-bold tabular-nums tracking-tight", scoreColor(pick.cspScore))}>{pick.cspScore.toFixed(0)}</span>
       </div>
@@ -121,10 +121,10 @@ function PickCard({ pick, budget, onAdd }: { pick: Pick; budget: number; onAdd: 
         <Metric label={`${contracts} kontrat`} value={usd(periodIncome)} color="text-emerald-400" align="right" />
       </div>
 
-      {note && <div className="text-xs text-orange-400/80">⚠ {note}</div>}
+      {note && <div className="text-xs font-bold text-orange-400">⚠ {note}</div>}
 
       <button onClick={() => onAdd(pick)}
-        className="flex w-full items-center justify-center gap-1.5 rounded-md bg-emerald-500/15 py-1.5 text-sm font-medium text-emerald-400 hover:bg-emerald-500/25 transition-colors">
+        className="flex w-full items-center justify-center gap-1.5 rounded-md bg-emerald-500/15 py-1.5 text-sm font-bold text-emerald-400 hover:bg-emerald-500/25 transition-colors">
         <ShoppingCart className="h-3.5 w-3.5" /> Sepete ekle
       </button>
     </div>
@@ -140,12 +140,12 @@ function TickerGroup({ group, onAdd }: { group: Group; onAdd: (s: Pick) => void 
       <button onClick={() => setOpen(!open)}
         className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-white/[0.02] transition-colors">
         <div className="flex items-center gap-3">
-          {open ? <ChevronDown className="h-4 w-4 text-white/40" /> : <ChevronRight className="h-4 w-4 text-white/40" />}
-          <span className="text-sm font-semibold text-white">{group.ticker}</span>
-          <span className="text-sm text-white/50 tabular-nums">${group.spot.toFixed(2)}</span>
+          {open ? <ChevronDown className="h-4 w-4 text-white/90" /> : <ChevronRight className="h-4 w-4 text-white/90" />}
+          <span className="text-sm font-bold text-white">{group.ticker}</span>
+          <span className="text-sm font-bold text-white/90 tabular-nums">${group.spot.toFixed(2)}</span>
           <IVClassBadge ivClass={group.bestClass} />
         </div>
-        <div className="flex items-center gap-5 text-sm text-white/50 tabular-nums">
+        <div className="flex items-center gap-5 text-sm font-bold text-white/90 tabular-nums">
           {best && (
             <span className="hidden sm:inline">
               En iyi <span className="text-white">${best.strike.toFixed(0)}P</span>
@@ -153,42 +153,42 @@ function TickerGroup({ group, onAdd }: { group: Group; onAdd: (s: Pick) => void 
             </span>
           )}
           {group.maxIV != null && <span>IV <span className="text-yellow-400">{group.maxIV.toFixed(0)}%</span></span>}
-          <span className="text-white/30">{group.strikes.length}</span>
+          <span className="text-white/90">{group.strikes.length}</span>
         </div>
       </button>
 
       {open && (
         <div className="overflow-x-auto border-t border-white/[0.04]">
-          <table className="w-full text-sm tabular-nums">
+          <table className="w-full text-sm font-bold tabular-nums">
             <thead>
-              <tr className="border-b border-white/[0.06] text-xs text-white">
-                <th className="w-16 pl-4 pr-0 py-2 text-left font-medium">Strike</th>
-                <th className="pl-0 pr-2 py-2 text-center font-medium">Buffer</th>
-                <th className="px-2 py-2 text-center font-medium">Prim</th>
-                <th className="px-2 py-2 text-center font-medium">Getiri</th>
-                <th className="px-2 py-2 text-center font-medium">Skor</th>
-                <th className="px-2 py-2 text-center font-medium">IV</th>
-                <th className="px-2 py-2 text-center font-medium">Delta</th>
-                <th className="px-2 py-2 text-center font-medium">P(ITM)</th>
-                <th className="px-2 py-2 text-center font-medium">OI</th>
-                <th className="px-2 py-2 text-center font-medium"></th>
+              <tr className="border-b border-white/[0.06] text-xs font-bold text-white">
+                <th className="w-16 pl-4 pr-0 py-2 text-left font-bold">Strike</th>
+                <th className="pl-0 pr-2 py-2 text-center font-bold">Buffer</th>
+                <th className="px-2 py-2 text-center font-bold">Prim</th>
+                <th className="px-2 py-2 text-center font-bold">Getiri</th>
+                <th className="px-2 py-2 text-center font-bold">Skor</th>
+                <th className="px-2 py-2 text-center font-bold">IV</th>
+                <th className="px-2 py-2 text-center font-bold">Delta</th>
+                <th className="px-2 py-2 text-center font-bold">P(ITM)</th>
+                <th className="px-2 py-2 text-center font-bold">OI</th>
+                <th className="px-2 py-2 text-center font-bold"></th>
               </tr>
             </thead>
             <tbody>
               {group.strikes.map((s) => (
                 <tr key={`${s.ticker}-${s.strike}`} className="border-b border-white/[0.03] hover:bg-white/[0.03]">
-                  <td className="w-16 pl-4 pr-0 py-2 font-medium text-white">${s.strike.toFixed(1)}</td>
-                  <td className="pl-0 pr-2 py-2 text-center font-semibold text-[#ff7200]">{otmPct(group.spot, s.strike).toFixed(1).replace(".", ",")}%</td>
-                  <td className="px-2 py-2 text-center font-semibold text-emerald-400">{usd(s.premium)}</td>
+                  <td className="w-16 pl-4 pr-0 py-2 font-bold text-white">${s.strike.toFixed(1)}</td>
+                  <td className="pl-0 pr-2 py-2 text-center font-bold text-[#ff7200]">{otmPct(group.spot, s.strike).toFixed(1).replace(".", ",")}%</td>
+                  <td className="px-2 py-2 text-center font-bold text-emerald-400">{usd(s.premium)}</td>
                   <td className="px-2 py-2 text-center text-emerald-400">{s.yieldPct.toFixed(2)}%</td>
-                  <td className="px-2 py-2 text-center"><span className={cn("font-semibold", scoreColor(s.cspScore))}>{s.cspScore.toFixed(0)}</span></td>
+                  <td className="px-2 py-2 text-center"><span className={cn("font-bold", scoreColor(s.cspScore))}>{s.cspScore.toFixed(0)}</span></td>
                   <td className="px-2 py-2 text-center text-yellow-400">{s.iv ? `${s.iv.toFixed(0)}%` : "—"}</td>
-                  <td className="px-2 py-2 text-center text-white/60">{s.delta != null ? s.delta.toFixed(2) : "—"}</td>
-                  <td className="px-2 py-2 text-center text-white/60">{s.probabilityITM != null ? `${s.probabilityITM.toFixed(0)}%` : "—"}</td>
-                  <td className="px-2 py-2 text-center text-white/40">{s.oi > 0 ? s.oi.toLocaleString("tr-TR") : "—"}</td>
+                  <td className="px-2 py-2 text-center text-white/90">{s.delta != null ? s.delta.toFixed(2) : "—"}</td>
+                  <td className="px-2 py-2 text-center text-white/90">{s.probabilityITM != null ? `${s.probabilityITM.toFixed(0)}%` : "—"}</td>
+                  <td className="px-2 py-2 text-center text-white/90">{s.oi > 0 ? s.oi.toLocaleString("tr-TR") : "—"}</td>
                   <td className="px-2 py-2 text-center">
                     <button onClick={() => onAdd(s)} title="Sepete ekle"
-                      className="rounded p-1 text-white/40 hover:bg-[#ff7200]/10 hover:text-[#ff7200]">
+                      className="rounded p-1 text-white/90 hover:bg-[#ff7200]/10 hover:text-[#ff7200]">
                       <Plus className="h-4 w-4" />
                     </button>
                   </td>
@@ -227,8 +227,8 @@ function FloatingBasket({ basket, budget, onRemove, onUpdateQty, onClear }: {
               <ShoppingCart className="h-5 w-5 text-emerald-400" /> Sepet
             </h3>
             <div className="flex items-center gap-3">
-              <button onClick={onClear} className="text-sm text-white/40 hover:text-red-400">Temizle</button>
-              <button onClick={() => setOpen(false)} className="text-white/40 hover:text-white"><X className="h-5 w-5" /></button>
+              <button onClick={onClear} className="text-sm font-bold text-white/90 hover:text-red-400">Temizle</button>
+              <button onClick={() => setOpen(false)} className="text-white/90 hover:text-white"><X className="h-5 w-5" /></button>
             </div>
           </div>
 
@@ -236,17 +236,17 @@ function FloatingBasket({ basket, budget, onRemove, onUpdateQty, onClear }: {
             {basket.map((item, idx) => (
               <div key={item.id} className="flex items-center justify-between py-3">
                 <div>
-                  <div className="text-sm font-semibold text-white">{item.ticker} <span className="text-white/50">${item.strike}P</span> <span className="text-[#ff7200] text-xs">B:{item.spot ? otmPct(item.spot, item.strike).toFixed(1).replace(".", ",") : "—"}%</span></div>
-                  <div className="text-xs text-white/40">{item.expiry} · {item.dte} gün</div>
+                  <div className="text-sm font-bold text-white">{item.ticker} <span className="text-white/90">${item.strike}P</span> <span className="text-[#ff7200] text-xs">B:{item.spot ? otmPct(item.spot, item.strike).toFixed(1).replace(".", ",") : "—"}%</span></div>
+                  <div className="text-xs font-bold text-white/90">{item.expiry} · {item.dte} gün</div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-sm font-semibold tabular-nums text-emerald-400">{usd(item.premium * item.qty)}</span>
+                  <span className="text-sm font-bold tabular-nums text-emerald-400">{usd(item.premium * item.qty)}</span>
                   <div className="flex items-center gap-1">
-                    <button onClick={() => onUpdateQty(idx, -1)} className="rounded-md p-1 hover:bg-white/10"><Minus className="h-4 w-4 text-white/60" /></button>
-                    <span className="w-6 text-center text-sm tabular-nums text-white">{item.qty}</span>
-                    <button onClick={() => onUpdateQty(idx, 1)} className="rounded-md p-1 hover:bg-white/10"><Plus className="h-4 w-4 text-white/60" /></button>
+                    <button onClick={() => onUpdateQty(idx, -1)} className="rounded-md p-1 hover:bg-white/10"><Minus className="h-4 w-4 text-white/90" /></button>
+                    <span className="w-6 text-center text-sm font-bold tabular-nums text-white">{item.qty}</span>
+                    <button onClick={() => onUpdateQty(idx, 1)} className="rounded-md p-1 hover:bg-white/10"><Plus className="h-4 w-4 text-white/90" /></button>
                   </div>
-                  <button onClick={() => onRemove(idx)} className="text-white/30 hover:text-red-400"><Trash2 className="h-4 w-4" /></button>
+                  <button onClick={() => onRemove(idx)} className="text-white/90 hover:text-red-400"><Trash2 className="h-4 w-4" /></button>
                 </div>
               </div>
             ))}
@@ -254,12 +254,12 @@ function FloatingBasket({ basket, budget, onRemove, onUpdateQty, onClear }: {
 
           <div className="border-t border-white/10 px-5 py-4 space-y-3">
             <div className="grid grid-cols-3 gap-3 text-center">
-              <div><p className="text-xs text-white/40">Teminat</p><p className="text-base font-bold tabular-nums text-white">{usd(totals.totalCollateral)}</p></div>
-              <div><p className="text-xs text-white/40">Prim</p><p className="text-base font-bold tabular-nums text-emerald-400">{usd(totals.totalPremium)}</p></div>
-              <div><p className="text-xs text-white/40">Getiri</p><p className="text-base font-bold tabular-nums text-emerald-400">{totals.yieldPct.toFixed(2)}%</p></div>
+              <div><p className="text-xs font-bold text-white/90">Teminat</p><p className="text-base font-bold tabular-nums text-white">{usd(totals.totalCollateral)}</p></div>
+              <div><p className="text-xs font-bold text-white/90">Prim</p><p className="text-base font-bold tabular-nums text-emerald-400">{usd(totals.totalPremium)}</p></div>
+              <div><p className="text-xs font-bold text-white/90">Getiri</p><p className="text-base font-bold tabular-nums text-emerald-400">{totals.yieldPct.toFixed(2)}%</p></div>
             </div>
             <div>
-              <div className="mb-1 flex justify-between text-xs text-white/40">
+              <div className="mb-1 flex justify-between text-xs font-bold text-white/90">
                 <span>Bütçe kullanımı</span>
                 <span className="tabular-nums">{usd(totals.totalCollateral)} / {usd(budget)} · %{totals.budgetUse.toFixed(0)}</span>
               </div>
@@ -273,10 +273,10 @@ function FloatingBasket({ basket, budget, onRemove, onUpdateQty, onClear }: {
       )}
 
       <button onClick={() => setOpen(!open)}
-        className="flex items-center gap-2.5 rounded-full bg-[#ff7200] px-6 py-3.5 text-base font-semibold text-white shadow-lg hover:bg-[#ff8c3a] transition-colors">
+        className="flex items-center gap-2.5 rounded-full bg-[#ff7200] px-6 py-3.5 text-base font-bold text-white shadow-lg hover:bg-[#ff8c3a] transition-colors">
         <ShoppingCart className="h-5 w-5" />
         <span className="tabular-nums">{totals.totalQty}</span>
-        <span className="text-white/60">·</span>
+        <span className="text-white/90">·</span>
         <span className="tabular-nums">{usd(totals.totalPremium)}</span>
       </button>
     </div>
@@ -365,31 +365,30 @@ export default function CSPScreenerPage() {
   }, []);
 
   const hasPicks = data?.topPicks && data.topPicks["all"].length > 0;
-  const inputClass = "rounded-md border border-white/10 bg-[#050505] px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-[#ff7200]/50";
-  const labelClass = "text-xs font-medium text-white/40";
+  const inputClass = "rounded-md border border-white/10 bg-[#050505] px-3 py-2 text-sm font-bold text-white focus:outline-none focus:ring-1 focus:ring-[#ff7200]/50";
+  const labelClass = "text-sm font-bold text-white";
 
   return (
     <div className="space-y-6 pb-28">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-white">CSP Fırsat Motoru</h1>
-          <p className="mt-1 text-sm text-white/40">Max prim / min assignment — cash-secured put taraması</p>
+          <p className="mt-1 text-sm font-bold text-white/90">Max prim / min assignment — cash-secured put taraması</p>
         </div>
-        {data && <p className="text-sm text-white/40 tabular-nums">{data.totalContracts} kontrat · {data.groups.length} ticker</p>}
+        {data && <p className="text-sm font-bold text-white/90 tabular-nums">{data.totalContracts} kontrat · {data.groups.length} ticker</p>}
       </div>
 
       <div className="rounded-xl border border-white/10 bg-[#0b0b0c] p-4">
         <div className="flex flex-wrap items-end gap-4">
           <div className="space-y-1.5">
-            <label className={labelClass}>Watchlist</label>
             <div className="flex items-center gap-1">
               {(["mylist", "all", "custom"] as const).map((m) => (
                 <button key={m} onClick={() => setMode(m)}
-                  className={cn("rounded-md px-3 py-2 text-sm font-medium transition-colors", mode === m ? "bg-[#ff7200] text-white" : "bg-white/5 text-white/60 hover:bg-white/10")}>
+                  className={cn("rounded-md px-3 py-2 text-sm font-bold transition-colors", mode === m ? "bg-[#ff7200] text-white" : "bg-white/5 text-white/90 hover:bg-white/10")}>
                   {m === "mylist" ? "CSP Listem" : m === "all" ? "Tümü" : "Özel"}
                 </button>
               ))}
-              <button onClick={() => setEditingList((v) => !v)} title="Listeyi düzenle" className="rounded-md p-2 text-white/40 hover:bg-white/10 hover:text-white">
+              <button onClick={() => setEditingList((v) => !v)} title="Listeyi düzenle" className="rounded-md p-2 text-white/90 hover:bg-white/10 hover:text-white">
                 <Pencil className="h-4 w-4" />
               </button>
             </div>
@@ -405,7 +404,7 @@ export default function CSPScreenerPage() {
           {mode === "custom" && (
             <div className="min-w-[200px] flex-1 space-y-1.5">
               <label className={labelClass}>Tickers</label>
-              <input type="text" value={customTickers} onChange={(e) => setCustomTickers(e.target.value)} placeholder="TSLA,NVDA..." className={cn(inputClass, "w-full")} />
+              <input type="text" value={customTickers} onChange={(e) => setCustomTickers(e.target.value.toUpperCase())} placeholder="TSLA,NVDA..." className={cn(inputClass, "w-full uppercase")} />
             </div>
           )}
 
@@ -429,7 +428,7 @@ export default function CSPScreenerPage() {
           </div>
 
           <button onClick={handleScan} disabled={isLoading}
-            className="flex items-center gap-2 rounded-md bg-[#ff7200] px-6 py-2 text-sm font-semibold text-white hover:bg-[#ff8c3a] disabled:opacity-50">
+            className="flex items-center gap-2 rounded-md bg-[#ff7200] px-6 py-2 text-sm font-bold text-white hover:bg-[#ff8c3a] disabled:opacity-50">
             {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <TrendingUp className="h-4 w-4" />}
             {isLoading ? "Taranıyor..." : "Tara"}
           </button>
@@ -437,7 +436,7 @@ export default function CSPScreenerPage() {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+        <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-300">
           <AlertTriangle className="h-4 w-4 shrink-0" /> Tarama başarısız: {error.message}
         </div>
       )}
@@ -455,14 +454,14 @@ export default function CSPScreenerPage() {
 
       {hasPicks && (
         <details open className="rounded-2xl border border-[#ff7200]/30 bg-[#0a0a0c]">
-          <summary className="flex cursor-pointer items-center gap-2 p-5 text-sm font-bold text-white select-none">
-            <Target className="h-4 w-4 text-[#ff7200]" /> En İyi Fırsatlar
+          <summary className="flex cursor-pointer items-center gap-2 p-5 text-base font-bold text-white select-none">
+            <Target className="h-5 w-5 text-[#ff7200]" /> En İyi Fırsatlar
           </summary>
           <div className="px-5 pb-5 space-y-5">
           {/* Top 3 overall */}
           {data!.topPicks["all"].length > 0 && (
             <div className="space-y-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-[#ff7200]/70">🏆 Tüm Kontratlar Arasında En İyi 3</h3>
+              <h3 className="text-sm font-bold uppercase tracking-wide text-[#ff7200]">🏆 Tüm Kontratlar Arasında En İyi 3</h3>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 {data!.topPicks["all"].map((p, i) => <PickCard key={`all-${p.ticker}-${p.strike}-${i}`} pick={p} budget={budget} onAdd={addToBasket} />)}
               </div>
@@ -490,7 +489,7 @@ export default function CSPScreenerPage() {
                     IV {bucket === "below-70" ? "<70" : bucket}%
                   </div>
                   {picks.length === 0 ? (
-                    <div className="flex h-40 items-center justify-center rounded-lg border border-dashed border-white/10 text-sm text-white/30">Uygun fırsat yok</div>
+                    <div className="flex h-40 items-center justify-center rounded-lg border border-dashed border-white/10 text-sm font-bold text-white/90">Uygun fırsat yok</div>
                   ) : (
                     picks.map((p, i) => <PickCard key={`${p.ticker}-${p.strike}-${i}`} pick={p} budget={budget} onAdd={addToBasket} />)
                   )}
@@ -508,17 +507,17 @@ export default function CSPScreenerPage() {
             <h2 className="text-sm font-bold text-white">Tüm Kontratlar</h2>
             <div className="flex items-center gap-4">
               <select value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)}
-                className="rounded-md border border-white/10 bg-[#050505] px-2.5 py-1.5 text-xs text-white focus:outline-none">
+                className="rounded-md border border-white/10 bg-[#050505] px-2.5 py-1.5 text-xs font-bold text-white focus:outline-none">
                 <option value="score">Skor</option>
                 <option value="maxIV">Max IV</option>
                 <option value="maxYield">Max Getiri</option>
                 <option value="ticker">Ticker</option>
               </select>
-              <label className="flex cursor-pointer items-center gap-1.5 text-xs text-white/50">
+              <label className="flex cursor-pointer items-center gap-1.5 text-xs font-bold text-white/90">
                 <input type="checkbox" checked={hideK4} onChange={(e) => setHideK4(e.target.checked)} className="h-3.5 w-3.5 rounded border-white/20" />
                 K4 gizle
               </label>
-              <span className="text-xs text-white/30 tabular-nums">{filteredGroups.length} ticker</span>
+              <span className="text-xs font-bold text-white/90 tabular-nums">{filteredGroups.length} ticker</span>
             </div>
           </div>
           <div>
@@ -529,14 +528,14 @@ export default function CSPScreenerPage() {
 
       {data?.diagnostics && data.diagnostics.some((d) => d.reason) && (
         <details className="rounded-lg border border-white/10 bg-[#0b0b0c]">
-          <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm font-medium text-white/50">
+          <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm font-bold text-white/90">
             <AlertTriangle className="h-4 w-4" /> Diagnostics ({data.diagnostics.filter((d) => d.reason).length})
           </summary>
           <div className="space-y-1.5 px-4 pb-3">
             {data.diagnostics.filter((d) => d.reason).map((d) => (
-              <div key={d.ticker} className="flex items-center gap-3 text-sm">
-                <span className="w-14 font-medium text-white">{d.ticker}</span>
-                <span className="text-white/50">{d.reason}</span>
+              <div key={d.ticker} className="flex items-center gap-3 text-sm font-bold">
+                <span className="w-14 font-bold text-white">{d.ticker}</span>
+                <span className="text-white/90">{d.reason}</span>
               </div>
             ))}
           </div>
@@ -546,7 +545,7 @@ export default function CSPScreenerPage() {
       {!data && !isLoading && !error && (
         <div className="flex flex-col items-center justify-center py-24 text-center">
           <Target className="mb-4 h-12 w-12 text-white/15" />
-          <p className="text-sm text-white/40">Watchlist ve vade seçip <span className="text-[#ff7200]">Tara</span>&apos;ya basın</p>
+          <p className="text-sm font-bold text-white/90">Watchlist ve vade seçip <span className="text-[#ff7200]">Tara</span>&apos;ya basın</p>
         </div>
       )}
 

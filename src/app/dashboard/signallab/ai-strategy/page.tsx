@@ -413,7 +413,7 @@ export default function AIStrategyPage() {
   const isLoading = isFetching || scanning;
 
   const inputClass = "rounded-md border border-white/10 bg-[#050505] px-3 py-2 text-sm font-bold text-white focus:outline-none focus:ring-1 focus:ring-[#ff7200]/50";
-  const labelClass = "text-xs font-bold text-white";
+  const labelClass = "text-sm font-bold text-white";
 
   return (
     <div className="space-y-6 pb-12">
@@ -434,7 +434,6 @@ export default function AIStrategyPage() {
       <div className="rounded-xl border border-white/10 bg-[#0b0b0c] p-4">
         <div className="flex flex-wrap items-end gap-4">
           <div className="space-y-1.5">
-            <label className={labelClass}>Watchlist</label>
             <div className="flex items-center gap-1">
               {(["mylist", "all", "custom"] as const).map((m) => (
                 <button key={m} onClick={() => setMode(m)}
@@ -458,7 +457,7 @@ export default function AIStrategyPage() {
           {mode === "custom" && (
             <div className="min-w-[200px] flex-1 space-y-1.5">
               <label className={labelClass}>Tickers</label>
-              <input type="text" value={customTickers} onChange={(e) => setCustomTickers(e.target.value)} placeholder="TSLA,NVDA..." className={cn(inputClass, "w-full")} />
+              <input type="text" value={customTickers} onChange={(e) => setCustomTickers(e.target.value.toUpperCase())} placeholder="TSLA,NVDA..." className={cn(inputClass, "w-full uppercase")} />
             </div>
           )}
 
