@@ -9,7 +9,7 @@ import { greeks as bsGreeks, realWorldProbability } from "./black-scholes";
 
 // ─── Retry helper ────────────────────────────────────────────────────────────
 async function sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
-async function withRetry<T>(fn: () => Promise<T>, retries = 2, baseDelay = 15000): Promise<T> {
+async function withRetry<T>(fn: () => Promise<T>, retries = 3, baseDelay = 4000): Promise<T> {
   for (let i = 0; i < retries; i++) {
     try { return await fn(); } catch (e) {
       if (i === retries - 1) throw e;
@@ -145,7 +145,9 @@ function setCache<T>(key: string, data: T): void {
 
 // ─── Request throttle (avoid Yahoo 429) ──────────────────────────────────────
 let lastRequestTime = 0;
-const MIN_REQUEST_GAP = 2000; // 2 seconds between requests
+// TARAMA HIZI AYARI: istekler arası bekleme (ms). Düşürünce hızlanır ama 429 riski artar.
+// 429 görürsen yükselt (800-1200), sorunsuzsa düşür (300).
+const MIN_REQUEST_GAP = 500;
 
 async function throttle(): Promise<void> {
   const now = Date.now();

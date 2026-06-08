@@ -5,6 +5,8 @@ import { trpc } from "@/lib/trpc/client";
 import { cn } from "@/lib/utils";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/server/root";
+import { useScanState } from "@/hooks/useScanState";
+import { usd, otmPct } from "@/lib/format";
 import {
   TrendingUp,
   ShoppingCart,
@@ -24,28 +26,10 @@ type CSPScan = inferRouterOutputs<AppRouter>["signallab"]["cspScan"];
 type Pick = CSPScan["topPicks"]["70-100"][number];
 type Group = CSPScan["groups"][number];
 
-type Mode = "mylist" | "all" | "custom";
 type SortKey = "score" | "maxIV" | "maxYield" | "ticker";
 
 const DEFAULT_CSP_LIST = "NASA,RKLB,DRAM,MRVL,NNE,AMBA,CBRS,OSCR,EOSE,BMNR,IREN,CLS,MU,CRDO,SNDK,AAOI,PENG,GLW";
 const IV_BUCKETS = ["all", "below-70", "70-100", "100-140", "140+"] as const;
-
-const usd = (n: number) => `${Math.round(n).toLocaleString("tr-TR")}$`;
-const otmPct = (spot: number, strike: number) => (spot > 0 ? ((spot - strike) / spot) * 100 : 0);
-
-function generateFridays(): { date: string; label: string }[] {
-  const fridays: { date: string; label: string }[] = [];
-  const now = new Date();
-  for (let i = 1; i < 120 && fridays.length < 10; i++) {
-    const d = new Date(now.getTime() + i * 86400000);
-    if (d.getUTCDay() === 5) {
-      const dateStr = d.toISOString().split("T")[0];
-      const label = `${d.toLocaleDateString("tr-TR", { day: "numeric", month: "short" })} (${i}g)`;
-      fridays.push({ date: dateStr, label });
-    }
-  }
-  return fridays;
-}
 
 interface BasketItem {
   id: string; ticker: string; strike: number; expiry: string; dte: number;
@@ -221,32 +205,32 @@ function FloatingBasket({ basket, budget, onRemove, onUpdateQty, onClear }: {
   return (
     <div className="fixed bottom-6 right-6 z-50">
       {open && (
-        <div className="mb-3 flex max-h-[70vh] w-[440px] flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#0c0c0e] shadow-2xl">
+        <div className="mb-3 flex max-h-[70vh] w-[600px] flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#0c0c0e] shadow-2xl">
           <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
-            <h3 className="flex items-center gap-2 text-base font-bold text-white">
+            <h3 className="flex items-center gap-2 text-lg font-bold text-white">
               <ShoppingCart className="h-5 w-5 text-emerald-400" /> Sepet
             </h3>
             <div className="flex items-center gap-3">
-              <button onClick={onClear} className="text-sm font-bold text-white/90 hover:text-red-400">Temizle</button>
-              <button onClick={() => setOpen(false)} className="text-white/90 hover:text-white"><X className="h-5 w-5" /></button>
+              <button onClick={onClear} className="text-sm font-bold text-white hover:text-red-400">Temizle</button>
+              <button onClick={() => setOpen(false)} className="text-white hover:text-white"><X className="h-5 w-5" /></button>
             </div>
           </div>
 
-          <div className="flex-1 divide-y divide-white/[0.05] overflow-y-auto px-5">
+          <div className="flex-1 divide-y divide-white/15 overflow-y-auto px-5">
             {basket.map((item, idx) => (
               <div key={item.id} className="flex items-center justify-between py-3">
                 <div>
-                  <div className="text-sm font-bold text-white">{item.ticker} <span className="text-white/90">${item.strike}P</span> <span className="text-[#ff7200] text-xs">B:{item.spot ? otmPct(item.spot, item.strike).toFixed(1).replace(".", ",") : "—"}%</span></div>
-                  <div className="text-xs font-bold text-white/90">{item.expiry} · {item.dte} gün</div>
+                  <div className="flex items-center gap-2 text-base font-bold text-white"><span>{item.ticker}</span> <span className="text-white">${item.strike}P</span> <span className="text-[#ff7200]">B:{item.spot ? otmPct(item.spot, item.strike).toFixed(1).replace(".", ",") : "—"}%</span></div>
+                  <div className="text-sm font-bold text-white">{item.expiry} · {item.dte} gün</div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-sm font-bold tabular-nums text-emerald-400">{usd(item.premium * item.qty)}</span>
+                  <span className="text-base font-bold tabular-nums text-emerald-400">{usd(item.premium * item.qty)}</span>
                   <div className="flex items-center gap-1">
-                    <button onClick={() => onUpdateQty(idx, -1)} className="rounded-md p-1 hover:bg-white/10"><Minus className="h-4 w-4 text-white/90" /></button>
-                    <span className="w-6 text-center text-sm font-bold tabular-nums text-white">{item.qty}</span>
-                    <button onClick={() => onUpdateQty(idx, 1)} className="rounded-md p-1 hover:bg-white/10"><Plus className="h-4 w-4 text-white/90" /></button>
+                    <button onClick={() => onUpdateQty(idx, -1)} className="rounded-md p-1 hover:bg-white/10"><Minus className="h-5 w-5 text-white" /></button>
+                    <span className="w-7 text-center text-base font-bold tabular-nums text-white">{item.qty}</span>
+                    <button onClick={() => onUpdateQty(idx, 1)} className="rounded-md p-1 hover:bg-white/10"><Plus className="h-5 w-5 text-white" /></button>
                   </div>
-                  <button onClick={() => onRemove(idx)} className="text-white/90 hover:text-red-400"><Trash2 className="h-4 w-4" /></button>
+                  <button onClick={() => onRemove(idx)} className="text-white hover:text-red-400"><Trash2 className="h-5 w-5" /></button>
                 </div>
               </div>
             ))}
@@ -254,16 +238,16 @@ function FloatingBasket({ basket, budget, onRemove, onUpdateQty, onClear }: {
 
           <div className="border-t border-white/10 px-5 py-4 space-y-3">
             <div className="grid grid-cols-3 gap-3 text-center">
-              <div><p className="text-xs font-bold text-white/90">Teminat</p><p className="text-base font-bold tabular-nums text-white">{usd(totals.totalCollateral)}</p></div>
-              <div><p className="text-xs font-bold text-white/90">Prim</p><p className="text-base font-bold tabular-nums text-emerald-400">{usd(totals.totalPremium)}</p></div>
-              <div><p className="text-xs font-bold text-white/90">Getiri</p><p className="text-base font-bold tabular-nums text-emerald-400">{totals.yieldPct.toFixed(2)}%</p></div>
+              <div><p className="text-sm font-bold text-white">Teminat</p><p className="text-lg font-bold tabular-nums text-white">{usd(totals.totalCollateral)}</p></div>
+              <div><p className="text-sm font-bold text-white">Prim</p><p className="text-lg font-bold tabular-nums text-emerald-400">{usd(totals.totalPremium)}</p></div>
+              <div><p className="text-sm font-bold text-white">Getiri</p><p className="text-lg font-bold tabular-nums text-emerald-400">{totals.yieldPct.toFixed(2)}%</p></div>
             </div>
             <div>
-              <div className="mb-1 flex justify-between text-xs font-bold text-white/90">
+              <div className="mb-1 flex justify-between text-sm font-bold text-white">
                 <span>Bütçe kullanımı</span>
                 <span className="tabular-nums">{usd(totals.totalCollateral)} / {usd(budget)} · %{totals.budgetUse.toFixed(0)}</span>
               </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+              <div className="h-2 overflow-hidden rounded-full bg-white/10">
                 <div className={cn("h-full rounded-full", totals.budgetUse > 100 ? "bg-red-500" : "bg-[#ff7200]")}
                   style={{ width: `${Math.min(100, totals.budgetUse)}%` }} />
               </div>
@@ -276,7 +260,7 @@ function FloatingBasket({ basket, budget, onRemove, onUpdateQty, onClear }: {
         className="flex items-center gap-2.5 rounded-full bg-[#ff7200] px-6 py-3.5 text-base font-bold text-white shadow-lg hover:bg-[#ff8c3a] transition-colors">
         <ShoppingCart className="h-5 w-5" />
         <span className="tabular-nums">{totals.totalQty}</span>
-        <span className="text-white/90">·</span>
+        <span className="text-white">·</span>
         <span className="tabular-nums">{usd(totals.totalPremium)}</span>
       </button>
     </div>
@@ -284,31 +268,11 @@ function FloatingBasket({ basket, budget, onRemove, onUpdateQty, onClear }: {
 }
 
 export default function CSPScreenerPage() {
-  const fridays = useMemo(() => generateFridays(), []);
-  const [mode, setMode] = useState<Mode>(() => {
-    if (typeof window !== "undefined") return (localStorage.getItem("csp_mode") as Mode) || "mylist";
-    return "mylist";
-  });
-  const [cspList, setCspList] = useState(() => {
-    if (typeof window !== "undefined") return localStorage.getItem("csp_my_list") || DEFAULT_CSP_LIST;
-    return DEFAULT_CSP_LIST;
-  });
-  const [customTickers, setCustomTickers] = useState(() => {
-    if (typeof window !== "undefined") return localStorage.getItem("csp_custom_tickers") || "";
-    return "";
-  });
-  const [budget, setBudget] = useState(() => {
-    if (typeof window !== "undefined") return Number(localStorage.getItem("csp_budget")) || 250000;
-    return 250000;
-  });
-  const [editingList, setEditingList] = useState(false);
-  const [expiry, setExpiry] = useState(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("csp_expiry");
-      if (saved && fridays.some((f) => f.date === saved)) return saved;
-    }
-    return fridays[1]?.date ?? fridays[0]?.date ?? "";
-  });
+  const {
+    fridays, mode, setMode, list: cspList, setList: setCspList,
+    customTickers, setCustomTickers, budget, setBudget,
+    expiry, setExpiry, editingList, setEditingList, scanWatchlist, scanTickers,
+  } = useScanState({ prefix: "csp", defaultList: DEFAULT_CSP_LIST, defaultBudget: 250000 });
   const [minOI, setMinOI] = useState(0);
   const [sortKey, setSortKey] = useState<SortKey>("score");
   const [hideK4, setHideK4] = useState(false);
@@ -320,22 +284,16 @@ export default function CSPScreenerPage() {
   });
   const [scanning, setScanning] = useState(false);
 
-  const scanInput = useMemo(() => {
-    if (mode === "all") return { watchlist: "all" as const, customTickers: "", expiry, minOI };
-    if (mode === "custom") return { watchlist: "custom" as const, customTickers, expiry, minOI };
-    return { watchlist: "custom" as const, customTickers: cspList, expiry, minOI };
-  }, [mode, customTickers, cspList, expiry, minOI]);
+  const scanInput = useMemo(
+    () => ({ watchlist: scanWatchlist, customTickers: scanTickers, expiry, minOI }),
+    [scanWatchlist, scanTickers, expiry, minOI],
+  );
 
   const { data, error, refetch, isFetching } = trpc.signallab.cspScan.useQuery(scanInput, { enabled: false, refetchOnWindowFocus: false });
 
   const handleScan = useCallback(async () => { setScanning(true); await refetch(); setScanning(false); }, [refetch]);
   const isLoading = isFetching || scanning;
 
-  useEffect(() => { localStorage.setItem("csp_mode", mode); }, [mode]);
-  useEffect(() => { localStorage.setItem("csp_my_list", cspList); }, [cspList]);
-  useEffect(() => { localStorage.setItem("csp_custom_tickers", customTickers); }, [customTickers]);
-  useEffect(() => { localStorage.setItem("csp_budget", String(budget)); }, [budget]);
-  useEffect(() => { localStorage.setItem("csp_expiry", expiry); }, [expiry]);
   useEffect(() => { localStorage.setItem("csp_basket", JSON.stringify(basket)); }, [basket]);
 
   const filteredGroups = useMemo<Group[]>(() => {
@@ -365,7 +323,7 @@ export default function CSPScreenerPage() {
   }, []);
 
   const hasPicks = data?.topPicks && data.topPicks["all"].length > 0;
-  const inputClass = "rounded-md border border-white/10 bg-[#050505] px-3 py-2 text-sm font-bold text-white focus:outline-none focus:ring-1 focus:ring-[#ff7200]/50";
+  const inputClass = "rounded-md border border-white/10 bg-[#050505] px-4 py-2 text-sm font-bold text-white focus:outline-none focus:ring-1 focus:ring-[#ff7200]/50";
   const labelClass = "text-sm font-bold text-white";
 
   return (
@@ -379,7 +337,7 @@ export default function CSPScreenerPage() {
       </div>
 
       <div className="rounded-xl border border-white/10 bg-[#0b0b0c] p-4">
-        <div className="flex flex-wrap items-end gap-4">
+        <div className="flex flex-wrap items-end gap-5">
           <div className="space-y-1.5">
             <div className="flex items-center gap-1">
               {(["mylist", "all", "custom"] as const).map((m) => (
@@ -409,21 +367,21 @@ export default function CSPScreenerPage() {
           )}
 
           <div className="space-y-1.5">
-            <label className={labelClass}>Bütçe</label>
+            <label className={labelClass}>Bütçe&nbsp;</label>
             <input type="text" inputMode="numeric" value={usd(budget)}
               onChange={(e) => setBudget(Number(e.target.value.replace(/[^\d]/g, "")) || 0)}
               className={cn(inputClass, "w-32 tabular-nums")} />
           </div>
 
           <div className="space-y-1.5">
-            <label className={labelClass}>Vade</label>
+            <label className={labelClass}>Vade&nbsp;</label>
             <select value={expiry} onChange={(e) => setExpiry(e.target.value)} className={inputClass}>
               {fridays.map((f) => <option key={f.date} value={f.date}>{f.label}</option>)}
             </select>
           </div>
 
           <div className="space-y-1.5">
-            <label className={labelClass}>Min OI</label>
+            <label className={labelClass}>Min OI&nbsp;</label>
             <input type="number" value={minOI} onChange={(e) => setMinOI(Number(e.target.value))} min={0} className={cn(inputClass, "w-24 tabular-nums")} />
           </div>
 
@@ -468,7 +426,7 @@ export default function CSPScreenerPage() {
             </div>
           )}
           {/* IV bucket breakdown */}
-          <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-4">
+          <div className="space-y-1.5">
             {(["below-70", "70-100", "100-140", "140+"] as const).map((bucket) => {
               const picks = data!.topPicks[bucket];
               const colors: Record<string, string> = {
@@ -489,9 +447,11 @@ export default function CSPScreenerPage() {
                     IV {bucket === "below-70" ? "<70" : bucket}%
                   </div>
                   {picks.length === 0 ? (
-                    <div className="flex h-40 items-center justify-center rounded-lg border border-dashed border-white/10 text-sm font-bold text-white/90">Uygun fırsat yok</div>
+                    <div className="flex h-24 items-center justify-center rounded-lg border border-dashed border-white/10 text-sm font-bold text-white/90">Uygun fırsat yok</div>
                   ) : (
-                    picks.map((p, i) => <PickCard key={`${p.ticker}-${p.strike}-${i}`} pick={p} budget={budget} onAdd={addToBasket} />)
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                      {picks.map((p, i) => <PickCard key={`${p.ticker}-${p.strike}-${i}`} pick={p} budget={budget} onAdd={addToBasket} />)}
+                    </div>
                   )}
                 </div>
               );

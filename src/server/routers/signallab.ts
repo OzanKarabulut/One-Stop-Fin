@@ -157,10 +157,8 @@ async function fetchCSPTicker(
       const bid = put.bid;
       const ask = put.ask;
       const last = put.last;
-      let mid: number;
-      if (last > 0) mid = last;
-      else if (bid > 0 && ask > 0) mid = (bid + ask) / 2;
-      else continue;
+      if (last <= 0) continue;
+      const mid = last;
       hasMid++;
 
       const oi = put.oi;

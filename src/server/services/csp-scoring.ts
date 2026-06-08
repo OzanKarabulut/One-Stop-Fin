@@ -90,7 +90,7 @@ export function scoreCSPContract(input: CSPScoringInput): CSPScoringResult {
 
   // ─── Risk notes ────────────────────────────────────────────────────────────
   if (ivBucket === "140+") riskNotes.push("Extreme IV — possible event");
-  if (expectedMoveBuffer !== null && expectedMoveBuffer < 1.0) riskNotes.push("Inside 1σ move");
+  if (expectedMoveBuffer !== null && expectedMoveBuffer < 1.0) riskNotes.push("1σ içinde — hisse normal dalgalanmasıyla bile bu strike'a düşebilir, güvenli mesafe yok");
   if (absDelta !== null && absDelta > 0.35 && company.grade !== "A") riskNotes.push("High delta (>0.35)");
   if (probabilityITM !== null && probabilityITM > 25) riskNotes.push(`P(ITM) ${probabilityITM.toFixed(0)}%`);
 

@@ -3,6 +3,10 @@
 import { useState, useMemo, useCallback } from "react";
 import { trpc } from "@/lib/trpc/client";
 import { cn } from "@/lib/utils";
+import type { inferRouterOutputs } from "@trpc/server";
+import type { AppRouter } from "@/server/root";
+import { useScanState } from "@/hooks/useScanState";
+import { usd } from "@/lib/format";
 import {
   Brain,
   Loader2,
@@ -17,25 +21,7 @@ import {
   BarChart3,
 } from "lucide-react";
 
-type Mode = "mylist" | "all" | "custom";
-
 const DEFAULT_LIST = "NASA,RKLB,DRAM,MRVL,NNE,AMBA,CBRS,OSCR,EOSE,BMNR,IREN,CLS,MU,CRDO,SNDK,AAOI,PENG,GLW";
-
-const usd = (n: number) => `${Math.round(n).toLocaleString("tr-TR")}$`;
-
-function generateFridays(): { date: string; label: string }[] {
-  const fridays: { date: string; label: string }[] = [];
-  const now = new Date();
-  for (let i = 1; i < 120 && fridays.length < 10; i++) {
-    const d = new Date(now.getTime() + i * 86400000);
-    if (d.getUTCDay() === 5) {
-      const dateStr = d.toISOString().split("T")[0];
-      const label = `${d.toLocaleDateString("tr-TR", { day: "numeric", month: "short" })} (${i}g)`;
-      fridays.push({ date: dateStr, label });
-    }
-  }
-  return fridays;
-}
 
 function scoreColor(score: number): string {
   if (score >= 65) return "text-emerald-400";
@@ -75,24 +61,7 @@ function SignalPill({ label, ok }: { label: string; ok: boolean }) {
   );
 }
 
-interface StrategyItem {
-  ticker: string;
-  tickerPrice: number;
-  name: string;
-  type: string;
-  description: string;
-  compositeScore: number;
-  probability: number;
-  maxProfit: number;
-  maxLoss: number;
-  ev: number;
-  evPct: number;
-  volEdge: number;
-  netCredit: number;
-  signals: { ivRankOk: boolean; trendOk: boolean; dteOk: boolean; earningsRisk: boolean } | null;
-  legs: { action: string; type: string; strike: number; price: number; contracts: number }[];
-  why: string;
-}
+type StrategyItem = inferRouterOutputs<AppRouter>["signallab"]["aiStrategyScan"]["topStrategies"][number];
 
 interface ScenarioRow {
   price: number;
@@ -392,20 +361,17 @@ function StrategyCard({ strategy, rank }: { strategy: StrategyItem; rank: number
 }
 
 export default function AIStrategyPage() {
-  const fridays = useMemo(() => generateFridays(), []);
-  const [mode, setMode] = useState<Mode>("mylist");
-  const [myList, setMyList] = useState(DEFAULT_LIST);
-  const [customTickers, setCustomTickers] = useState("");
-  const [budget, setBudget] = useState(100000);
-  const [expiry, setExpiry] = useState(fridays[1]?.date ?? fridays[0]?.date ?? "");
-  const [editingList, setEditingList] = useState(false);
+  const {
+    fridays, mode, setMode, list: myList, setList: setMyList,
+    customTickers, setCustomTickers, budget, setBudget,
+    expiry, setExpiry, editingList, setEditingList, scanWatchlist, scanTickers,
+  } = useScanState({ prefix: "ai", defaultList: DEFAULT_LIST, defaultBudget: 250000 });
   const [scanning, setScanning] = useState(false);
 
-  const scanInput = useMemo(() => {
-    if (mode === "all") return { watchlist: "all" as const, customTickers: "", expiry, budget };
-    if (mode === "custom") return { watchlist: "custom" as const, customTickers, expiry, budget };
-    return { watchlist: "custom" as const, customTickers: myList, expiry, budget };
-  }, [mode, customTickers, myList, expiry, budget]);
+  const scanInput = useMemo(
+    () => ({ watchlist: scanWatchlist, customTickers: scanTickers, expiry, budget }),
+    [scanWatchlist, scanTickers, expiry, budget],
+  );
 
   const { data, error, refetch, isFetching } = trpc.signallab.aiStrategyScan.useQuery(scanInput, { enabled: false, refetchOnWindowFocus: false });
 
@@ -462,14 +428,14 @@ export default function AIStrategyPage() {
           )}
 
           <div className="space-y-1.5">
-            <label className={labelClass}>Bütçe</label>
+            <label className={labelClass}>Bütçe&nbsp;</label>
             <input type="text" inputMode="numeric" value={usd(budget)}
               onChange={(e) => setBudget(Number(e.target.value.replace(/[^\d]/g, "")) || 0)}
               className={cn(inputClass, "w-32 tabular-nums")} />
           </div>
 
           <div className="space-y-1.5">
-            <label className={labelClass}>Vade</label>
+            <label className={labelClass}>Vade&nbsp;</label>
             <select value={expiry} onChange={(e) => setExpiry(e.target.value)} className={inputClass}>
               {fridays.map((f) => <option key={f.date} value={f.date}>{f.label}</option>)}
             </select>
@@ -504,7 +470,7 @@ export default function AIStrategyPage() {
             <Brain className="h-4 w-4 text-[#ff7200]" /> En İyi Stratejiler
           </h2>
           {data.topStrategies.map((s, i) => (
-            <StrategyCard key={`${s.ticker}-${s.name}-${i}`} strategy={s as unknown as StrategyItem} rank={i + 1} />
+            <StrategyCard key={`${s.ticker}-${s.name}-${i}`} strategy={s} rank={i + 1} />
           ))}
         </div>
       )}
