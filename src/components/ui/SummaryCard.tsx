@@ -15,14 +15,14 @@ export function SummaryCard({ title, href, children, loading, error, empty }: Su
   return (
     <Card>
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
-        <Link href={href} className="text-xs text-link hover:underline">
+        <h3 className="text-sm font-bold text-white">{title}</h3>
+        <Link href={href} className="text-xs font-bold text-link hover:underline">
           Detay →
         </Link>
       </div>
-      {loading && <p className="text-xs text-text-muted">Yükleniyor...</p>}
-      {error && <p className="text-xs text-down">{error}</p>}
-      {empty && !loading && !error && <p className="text-xs text-text-muted">Veri yok</p>}
+      {loading && <p className="text-xs font-bold text-white/90">Yükleniyor...</p>}
+      {error && <p className="text-xs font-bold text-down">{error}</p>}
+      {empty && !loading && !error && <p className="text-xs font-bold text-white/90">Veri yok</p>}
       {!loading && !error && !empty && children}
     </Card>
   );

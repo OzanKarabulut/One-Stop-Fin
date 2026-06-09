@@ -26,31 +26,28 @@ interface ScanStateOpts {
 
 export function useScanState({ prefix, defaultList, defaultBudget }: ScanStateOpts) {
   const fridays = useMemo(() => generateFridays(), []);
+  const defaultExpiry = fridays[1]?.date ?? fridays[0]?.date ?? "";
 
-  const [mode, setMode] = useState<ScanMode>(() => {
-    if (typeof window !== "undefined") return (localStorage.getItem(`${prefix}_mode`) as ScanMode) || "mylist";
-    return "mylist";
-  });
-  const [list, setList] = useState(() => {
-    if (typeof window !== "undefined") return localStorage.getItem(`${prefix}_my_list`) || defaultList;
-    return defaultList;
-  });
-  const [customTickers, setCustomTickers] = useState(() => {
-    if (typeof window !== "undefined") return localStorage.getItem(`${prefix}_custom_tickers`) || "";
-    return "";
-  });
-  const [budget, setBudget] = useState(() => {
-    if (typeof window !== "undefined") return Number(localStorage.getItem(`${prefix}_budget`)) || defaultBudget;
-    return defaultBudget;
-  });
-  const [expiry, setExpiry] = useState(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem(`${prefix}_expiry`);
-      if (saved && fridays.some((f) => f.date === saved)) return saved;
-    }
-    return fridays[1]?.date ?? fridays[0]?.date ?? "";
-  });
+  const [mode, setMode] = useState<ScanMode>("mylist");
+  const [list, setList] = useState(defaultList);
+  const [customTickers, setCustomTickers] = useState("");
+  const [budget, setBudget] = useState(defaultBudget);
+  const [expiry, setExpiry] = useState(defaultExpiry);
   const [editingList, setEditingList] = useState(false);
+
+  // Hydrate from localStorage after mount
+  useEffect(() => {
+    const m = localStorage.getItem(`${prefix}_mode`) as ScanMode | null;
+    if (m) setMode(m);
+    const l = localStorage.getItem(`${prefix}_my_list`);
+    if (l) setList(l);
+    const ct = localStorage.getItem(`${prefix}_custom_tickers`);
+    if (ct) setCustomTickers(ct);
+    const b = localStorage.getItem(`${prefix}_budget`);
+    if (b) setBudget(Number(b) || defaultBudget);
+    const e = localStorage.getItem(`${prefix}_expiry`);
+    if (e && fridays.some((f) => f.date === e)) setExpiry(e);
+  }, [prefix, defaultBudget, defaultList, fridays]);
 
   useEffect(() => { localStorage.setItem(`${prefix}_mode`, mode); }, [prefix, mode]);
   useEffect(() => { localStorage.setItem(`${prefix}_my_list`, list); }, [prefix, list]);

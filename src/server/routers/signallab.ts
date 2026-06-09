@@ -89,7 +89,7 @@ function cspClassify(ivPct: number | null): number {
   return 4;
 }
 
-function findBestExpiry(available: string[], target: string, tolerance = 7): string | null {
+function findBestExpiry(available: string[], target: string, tolerance = 2): string | null {
   const targetDate = new Date(target + "T00:00:00Z");
   const now = new Date();
 
@@ -233,15 +233,21 @@ export const signallabRouter = router({
       const allContracts: CSPContract[] = [];
       const allDiags: CSPDiagnostic[] = [];
 
-      // Process tickers serially (provider handles rate limiting internally)
-      for (const t of tickers) {
+      // Ticker'ları paralel işle — gerçek eşzamanlılık yahoo-finance semaphore'unda sınırlı
+      const settled = await Promise.all(tickers.map(async (t) => {
         try {
           const result = await fetchCSPTicker(t, input.expiry, input.minOI);
-          allContracts.push(...result.contracts);
-          allDiags.push(result.diag);
+          return { contracts: result.contracts, diag: result.diag };
         } catch {
-          allDiags.push({ ticker: t, spot: null, expiry: null, rawPuts: 0, inRange: 0, hasMid: 0, oiPass: 0, kept: 0, reason: "fetch error" });
+          return {
+            contracts: [] as CSPContract[],
+            diag: { ticker: t, spot: null, expiry: null, rawPuts: 0, inRange: 0, hasMid: 0, oiPass: 0, kept: 0, reason: "fetch error" } as CSPDiagnostic,
+          };
         }
+      }));
+      for (const s of settled) {
+        allContracts.push(...s.contracts);
+        allDiags.push(s.diag);
       }
 
       // Group by ticker
@@ -382,13 +388,7 @@ export const signallabRouter = router({
       }
       const tickers = tickerStr.split(",").map((t) => t.trim().toUpperCase()).filter(Boolean);
 
-      const results: Array<{
-        ticker: string; price: number; strategies: ReturnType<typeof math.buildAIPick>["strategies"];
-        signals: ReturnType<typeof math.buildAIPick>["signals"];
-        debugReason: string;
-      }> = [];
-
-      for (const ticker of tickers) {
+      const results = await Promise.all(tickers.map(async (ticker) => {
         try {
           const expDate = new Date(input.expiry + "T00:00:00Z");
           const dte = Math.max(Math.ceil((expDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)), 0);
@@ -403,7 +403,7 @@ export const signallabRouter = router({
           try {
             const expiryInfo = await marketData.getExpirations(ticker);
             const matchedExpiry = findBestExpiry(expiryInfo.expirations, input.expiry);
-            if (!matchedExpiry) { results.push({ ticker, price: quote.price, strategies: [], signals: {} as never, debugReason: "Vade bulunamadı" }); continue; }
+            if (!matchedExpiry) return { ticker, price: quote.price, strategies: [], signals: {} as never, debugReason: "Vade bulunamadı" };
             const ts = expiryInfo.expirationTimestamps[matchedExpiry];
             chain = await marketData.getChain(ticker, matchedExpiry, ts) as unknown as yahoo.OptionChain;
           } catch {
@@ -411,11 +411,11 @@ export const signallabRouter = router({
           }
 
           const pick = math.buildAIPick(ticker, quote.price, input.expiry, dte, chain, hv, ivData.ivRank, ivData.currentIV);
-          results.push({ ticker, price: pick.price, strategies: pick.strategies, signals: pick.signals, debugReason: pick.debugInfo.reason });
+          return { ticker, price: pick.price, strategies: pick.strategies, signals: pick.signals, debugReason: pick.debugInfo.reason };
         } catch (err) {
-          results.push({ ticker, price: 0, strategies: [], signals: {} as never, debugReason: err instanceof Error ? err.message : "Hata" });
+          return { ticker, price: 0, strategies: [], signals: {} as never, debugReason: err instanceof Error ? err.message : "Hata" };
         }
-      }
+      }));
 
       // Flatten all strategies, attach ticker info, sort by composite score
       const allStrategies = results.flatMap((r) =>

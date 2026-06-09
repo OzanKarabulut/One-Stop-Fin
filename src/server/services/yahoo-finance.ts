@@ -21,9 +21,11 @@ async function withRetry<T>(fn: () => Promise<T>, retries = 3, baseDelay = 4000)
 }
 
 // ─── cURL-based fetcher (bypasses Node.js TLS fingerprinting) ────────────────
-import { execFileSync } from "child_process";
+import { execFileSync, execFile } from "child_process";
+import { promisify } from "util";
+const execFileAsync = promisify(execFile);
 
-function curlFetch(url: string, cookies?: string): { status: number; body: string } {
+async function curlFetch(url: string, cookies?: string): Promise<{ status: number; body: string }> {
   const args = [
     "-s", "-L", "--max-time", "30",
     "-w", "\n%{http_code}",
@@ -37,15 +39,20 @@ function curlFetch(url: string, cookies?: string): { status: number; body: strin
   }
   args.push(url);
 
-  const raw = execFileSync("/usr/bin/curl", args, {
-    encoding: "utf-8",
-    timeout: 35000,
-  });
-
-  const lines = raw.trimEnd().split("\n");
-  const statusStr = lines.pop() ?? "0";
-  const body = lines.join("\n");
-  return { status: parseInt(statusStr, 10), body };
+  try {
+    const { stdout } = await execFileAsync("/usr/bin/curl", args, {
+      encoding: "utf-8",
+      timeout: 35000,
+      maxBuffer: 20 * 1024 * 1024,
+    });
+    const raw = String(stdout);
+    const lines = raw.trimEnd().split("\n");
+    const statusStr = lines.pop() ?? "0";
+    const body = lines.join("\n");
+    return { status: parseInt(statusStr, 10), body };
+  } catch {
+    return { status: 0, body: "" };
+  }
 }
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -143,19 +150,32 @@ function setCache<T>(key: string, data: T): void {
   cache.set(key, { data, timestamp: Date.now() });
 }
 
-// ─── Request throttle (avoid Yahoo 429) ──────────────────────────────────────
-let lastRequestTime = 0;
-// TARAMA HIZI AYARI: istekler arası bekleme (ms). Düşürünce hızlanır ama 429 riski artar.
-// 429 görürsen yükselt (800-1200), sorunsuzsa düşür (300).
-const MIN_REQUEST_GAP = 500;
+// ─── Eşzamanlılık + pacing ───────────────────────────────────────────────────
+// TARAMA HIZI AYARI:
+//   MAX_CONCURRENT = aynı anda kaç Yahoo isteği (yükselt → daha hızlı, 429 riski artar)
+//   MIN_REQUEST_GAP = istek başlatmaları arası min ms (burst yumuşatma)
+// 429 görürsen MAX_CONCURRENT'i düşür (3-4) ve/veya gap'i yükselt.
+const MAX_CONCURRENT = 6;
+const MIN_REQUEST_GAP = 120;
 
-async function throttle(): Promise<void> {
-  const now = Date.now();
-  const elapsed = now - lastRequestTime;
-  if (elapsed < MIN_REQUEST_GAP) {
-    await sleep(MIN_REQUEST_GAP - elapsed);
+let activeRequests = 0;
+let lastRequestTime = 0;
+const waiters: Array<() => void> = [];
+
+async function acquireSlot(): Promise<void> {
+  if (activeRequests >= MAX_CONCURRENT) {
+    await new Promise<void>((resolve) => waiters.push(resolve));
   }
+  activeRequests++;
+  const gap = Date.now() - lastRequestTime;
+  if (gap < MIN_REQUEST_GAP) await sleep(MIN_REQUEST_GAP - gap);
   lastRequestTime = Date.now();
+}
+
+function releaseSlot(): void {
+  activeRequests = Math.max(0, activeRequests - 1);
+  const next = waiters.shift();
+  if (next) next();
 }
 
 // ─── Crumb Management ────────────────────────────────────────────────────────
@@ -167,11 +187,16 @@ let crumb: string | null = null;
 let crumbCookies: string | null = null;
 let crumbFetchedAt = 0;
 
+let crumbInFlight: Promise<{ crumb: string; cookies: string }> | null = null;
+
 async function ensureCrumb(): Promise<{ crumb: string; cookies: string }> {
   // Return cached crumb if fresh (< 4 hours)
   if (crumb && crumbCookies && Date.now() - crumbFetchedAt < 14400 * 1000) {
     return { crumb, cookies: crumbCookies };
   }
+  // single-flight: eşzamanlı isteklerde sadece tek crumb çekimi yapılır
+  if (crumbInFlight) return crumbInFlight;
+  crumbInFlight = (async () => {
 
   // fc.yahoo.com sets A3 cookie even from TR/EU regions
   const cookieJar = `/tmp/yf_cookies_${process.pid}.txt`;
@@ -222,6 +247,8 @@ async function ensureCrumb(): Promise<{ crumb: string; cookies: string }> {
   crumbFetchedAt = Date.now();
 
   return { crumb: crumbText, cookies };
+  })();
+  try { return await crumbInFlight; } finally { crumbInFlight = null; }
 }
 
 // ─── Low-level fetch ─────────────────────────────────────────────────────────
@@ -230,10 +257,10 @@ async function fetchJSON(urlStr: string): Promise<unknown> {
   // v8 chart endpoints work without crumb
   const isChartAPI = urlStr.includes("/v8/finance/chart/");
 
-  await throttle();
-
   if (isChartAPI) {
-    const result = curlFetch(urlStr);
+    await acquireSlot();
+    let result;
+    try { result = await curlFetch(urlStr); } finally { releaseSlot(); }
     if (result.status === 200) return JSON.parse(result.body);
     if (result.status === 429) {
       // Don't retry immediately — just fail and let cache handle it next time
@@ -244,12 +271,13 @@ async function fetchJSON(urlStr: string): Promise<unknown> {
 
   // For endpoints requiring crumb (options, etc)
   return withRetry(async () => {
-    await throttle();
     const { crumb: c, cookies } = await ensureCrumb();
     const separator = urlStr.includes("?") ? "&" : "?";
     const fullURL = `${urlStr}${separator}crumb=${encodeURIComponent(c)}`;
 
-    const result = curlFetch(fullURL, cookies);
+    await acquireSlot();
+    let result;
+    try { result = await curlFetch(fullURL, cookies); } finally { releaseSlot(); }
 
     if (result.status === 429) {
       throw new Error(`Yahoo 429 rate limited: ${urlStr}`);

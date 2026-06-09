@@ -82,7 +82,7 @@ function PickCard({ pick, budget, onAdd }: { pick: Pick; budget: number; onAdd: 
   const note = pick.riskNotes?.[0];
 
   return (
-    <div className="rounded-lg border border-white/10 bg-[#0e0e10] p-3.5 space-y-3">
+    <div className="flex flex-col rounded-lg border border-white/10 bg-[#0e0e10] p-3.5 space-y-3">
       <div className="flex items-start justify-between">
         <div>
           <div className="flex items-center gap-1.5 text-base font-bold tracking-tight text-white">
@@ -105,10 +105,10 @@ function PickCard({ pick, budget, onAdd }: { pick: Pick; budget: number; onAdd: 
         <Metric label={`${contracts} kontrat`} value={usd(periodIncome)} color="text-emerald-400" align="right" />
       </div>
 
-      {note && <div className="text-xs font-bold text-orange-400">⚠ {note}</div>}
+      <div className="text-xs font-bold text-orange-400 min-h-[2.5rem]">{note ? `⚠ ${note}` : "\u00A0"}</div>
 
       <button onClick={() => onAdd(pick)}
-        className="flex w-full items-center justify-center gap-1.5 rounded-md bg-emerald-500/15 py-1.5 text-sm font-bold text-emerald-400 hover:bg-emerald-500/25 transition-colors">
+        className="flex w-full items-center justify-center gap-1.5 rounded-md bg-emerald-500/15 py-1.5 text-sm font-bold text-emerald-400 hover:bg-emerald-500/25 transition-colors mt-auto">
         <ShoppingCart className="h-3.5 w-3.5" /> Sepete ekle
       </button>
     </div>
@@ -122,22 +122,22 @@ function TickerGroup({ group, onAdd }: { group: Group; onAdd: (s: Pick) => void 
   return (
     <div className="border-b border-white/[0.06] last:border-b-0">
       <button onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-white/[0.02] transition-colors">
-        <div className="flex items-center gap-3">
+        className="flex w-full items-center px-4 py-3 text-left hover:bg-white/[0.02] transition-colors">
+        <div className="flex items-center gap-3 w-[220px] shrink-0">
           {open ? <ChevronDown className="h-4 w-4 text-white/90" /> : <ChevronRight className="h-4 w-4 text-white/90" />}
-          <span className="text-sm font-bold text-white">{group.ticker}</span>
-          <span className="text-sm font-bold text-white/90 tabular-nums">${group.spot.toFixed(2)}</span>
+          <span className="text-sm font-bold text-white w-12">{group.ticker}</span>
+          <span className="text-sm font-bold text-white/90 tabular-nums w-[72px]">${group.spot.toFixed(2)}</span>
           <IVClassBadge ivClass={group.bestClass} />
         </div>
-        <div className="flex items-center gap-5 text-sm font-bold text-white/90 tabular-nums">
+        <div className="flex items-center gap-5 text-sm font-bold text-white/90 tabular-nums ml-auto">
           {best && (
-            <span className="hidden sm:inline">
+            <span className="hidden sm:inline w-[140px]">
               En iyi <span className="text-white">${best.strike.toFixed(0)}P</span>
               {" · "}<span className={scoreColor(best.cspScore)}>{best.cspScore.toFixed(0)}</span>
             </span>
           )}
-          {group.maxIV != null && <span>IV <span className="text-yellow-400">{group.maxIV.toFixed(0)}%</span></span>}
-          <span className="text-white/90">{group.strikes.length}</span>
+          {group.maxIV != null && <span className="w-[70px]">IV <span className="text-yellow-400">{group.maxIV.toFixed(0)}%</span></span>}
+          <span className="text-white/90 w-[30px] text-right">{group.strikes.length}</span>
         </div>
       </button>
 
@@ -276,13 +276,13 @@ export default function CSPScreenerPage() {
   const [minOI, setMinOI] = useState(0);
   const [sortKey, setSortKey] = useState<SortKey>("score");
   const [hideK4, setHideK4] = useState(false);
-  const [basket, setBasket] = useState<BasketItem[]>(() => {
-    if (typeof window !== "undefined") {
-      try { const s = localStorage.getItem("csp_basket"); if (s) return JSON.parse(s) as BasketItem[]; } catch { /* ignore */ }
-    }
-    return [];
-  });
+  const [basket, setBasket] = useState<BasketItem[]>([]);
   const [scanning, setScanning] = useState(false);
+
+  // Load basket from localStorage after mount to avoid hydration mismatch
+  useEffect(() => {
+    try { const s = localStorage.getItem("csp_basket"); if (s) setBasket(JSON.parse(s) as BasketItem[]); } catch { /* ignore */ }
+  }, []);
 
   const scanInput = useMemo(
     () => ({ watchlist: scanWatchlist, customTickers: scanTickers, expiry, minOI }),
@@ -420,7 +420,7 @@ export default function CSPScreenerPage() {
           {data!.topPicks["all"].length > 0 && (
             <div className="space-y-3">
               <h3 className="text-sm font-bold uppercase tracking-wide text-[#ff7200]">🏆 Tüm Kontratlar Arasında En İyi 3</h3>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-3">
                 {data!.topPicks["all"].map((p, i) => <PickCard key={`all-${p.ticker}-${p.strike}-${i}`} pick={p} budget={budget} onAdd={addToBasket} />)}
               </div>
             </div>
@@ -449,7 +449,7 @@ export default function CSPScreenerPage() {
                   {picks.length === 0 ? (
                     <div className="flex h-24 items-center justify-center rounded-lg border border-dashed border-white/10 text-sm font-bold text-white/90">Uygun fırsat yok</div>
                   ) : (
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                    <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-3">
                       {picks.map((p, i) => <PickCard key={`${p.ticker}-${p.strike}-${i}`} pick={p} budget={budget} onAdd={addToBasket} />)}
                     </div>
                   )}
