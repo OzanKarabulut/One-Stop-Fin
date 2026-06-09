@@ -102,6 +102,8 @@ export interface FearGreedData {
 
 export interface MarketOverviewData {
   indices: MarketIndex[];
+  treasuries: MarketIndex[];
+  futures: MarketIndex[];
   commodities: MarketIndex[];
   fearGreed: FearGreedData;
   vix: number;
@@ -599,40 +601,39 @@ export async function fetchRSI(ticker: string, period = 14): Promise<number> {
   return rsi;
 }
 
+async function fetchIndexGroup(symbols: string[]): Promise<MarketIndex[]> {
+  const results = await Promise.all(
+    symbols.map(async (sym) => {
+      try {
+        const { price, name } = await fetchQuote(sym);
+        const changePct = await fetchChangePct(sym).catch(() => 0);
+        return { symbol: sym, name, price, changePct } as MarketIndex;
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return results.filter((r): r is MarketIndex => r !== null);
+}
+
 export async function fetchMarketOverview(): Promise<MarketOverviewData> {
   const cacheKey = "market-overview";
   const cached = getCached<MarketOverviewData>(cacheKey);
   if (cached) return cached;
 
-  const symbols = ["^GSPC", "^NDX", "^DJI", "^RUT", "GC=F", "CL=F"];
-  const indices: MarketIndex[] = [];
+  // Tüm gruplar paralel — gerçek eşzamanlılık yahoo-finance semaphore'unda sınırlı
+  const [indices, treasuries, futures, commodities, vixGroup] = await Promise.all([
+    fetchIndexGroup(["^GSPC", "^NDX", "^DJI", "^RUT", "^KS11"]),
+    fetchIndexGroup(["^IRX", "^FVX", "^TNX", "^TYX"]),
+    fetchIndexGroup(["ES=F", "NQ=F"]),
+    fetchIndexGroup(["GC=F", "SI=F", "CL=F"]),
+    fetchIndexGroup(["^VIX"]),
+  ]);
 
-  // Sequential to avoid rate limiting
-  for (const sym of symbols) {
-    try {
-      const { price, name } = await fetchQuote(sym);
-      const chg = await fetchChangePct(sym).catch(() => 0);
-      indices.push({ symbol: sym, name, price, changePct: chg });
-    } catch { /* skip failed */ }
-  }
+  const vix = vixGroup[0]?.price ?? 20;
+  const fearGreed = fearGreedApprox(vix);
 
-  let vixPrice = 20;
-  try {
-    const vq = await fetchQuote("^VIX");
-    vixPrice = vq.price;
-  } catch {
-    /* fallback */
-  }
-
-  const fearGreed = fearGreedApprox(vixPrice);
-
-  const data: MarketOverviewData = {
-    indices: indices.slice(0, 4),
-    commodities: indices.slice(4),
-    fearGreed,
-    vix: vixPrice,
-  };
-
+  const data: MarketOverviewData = { indices, treasuries, futures, commodities, fearGreed, vix };
   setCache(cacheKey, data);
   return data;
 }
