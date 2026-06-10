@@ -9,6 +9,7 @@ import * as math from "../services/math-engine";
 import { impliedVolBisection } from "../services/black-scholes";
 import { scoreCSPContract, type IVBucket } from "../services/csp-scoring";
 import { marketData } from "../services/market-data";
+import { getCboeChain } from "../services/market-data/cboe";
 import { db } from "@/lib/db";
 import type { GexContractInput } from "@/lib/gex";
 
@@ -587,30 +588,46 @@ export const signallabRouter = router({
             }
           }
 
-          // ─── FIX 3: GEX with per-contract bisection IV + honest OI ─────────
+          // ─── GEX from CBOE (has real OI data) ─────────────────────────────
           let gex: ReturnType<typeof computeGexProfile> | null = null;
           let gexSkipReason: string | null = null;
-          const allFrontOpts = frontChain ? [...frontChain.calls, ...frontChain.puts] : [];
-          const withOi = allFrontOpts.filter(o => o.oi > 0);
+          let cboeDiag: { fetched: boolean; expiryUsed: string | null; contracts: number; oiSum: number } = { fetched: false, expiryUsed: null, contracts: 0, oiSum: 0 };
 
-          if (withOi.length < 10 || withOi.reduce((s, o) => s + o.oi, 0) < 500) {
-            gexSkipReason = withOi.length === 0
-              ? "Yahoo bu sorguda OI verisi sağlamadı — GEX hesaplanamaz"
-              : "Opsiyon OI verisi yetersiz — GEX güvenilir değil";
-          } else if (frontChain) {
-            const frontT = Math.max(frontChain.dte, 1) / 365;
-            const gexContracts: GexContractInput[] = [];
-            for (const c of frontChain.calls) {
-              if (c.oi <= 0) continue;
-              const iv = (solveIvPct(c, spot, frontT, true) ?? atmIvFront ?? 30) / 100;
-              gexContracts.push({ strike: c.strike, type: "call", openInterest: c.oi, iv });
+          const cboe = await getCboeChain(ticker);
+          if (!cboe) {
+            gexSkipReason = "CBOE verisi alınamadı — GEX hesaplanamaz";
+          } else {
+            cboeDiag.fetched = true;
+            // Find CBOE expiry closest to frontExpiry
+            const cboeExpiries = [...new Set(cboe.options.map(o => o.expiry))];
+            let bestExpiry = cboeExpiries[0] ?? null;
+            if (frontExpiry && cboeExpiries.length > 0) {
+              const targetMs = new Date(frontExpiry + "T00:00:00Z").getTime();
+              bestExpiry = cboeExpiries.reduce((best, exp) => {
+                const diff = Math.abs(new Date(exp + "T00:00:00Z").getTime() - targetMs);
+                const bestDiff = Math.abs(new Date(best + "T00:00:00Z").getTime() - targetMs);
+                return diff < bestDiff ? exp : best;
+              });
             }
-            for (const p of frontChain.puts) {
-              if (p.oi <= 0) continue;
-              const iv = (solveIvPct(p, spot, frontT, false) ?? atmIvFront ?? 30) / 100;
-              gexContracts.push({ strike: p.strike, type: "put", openInterest: p.oi, iv });
+            cboeDiag.expiryUsed = bestExpiry;
+
+            const expiryOpts = bestExpiry ? cboe.options.filter(o => o.expiry === bestExpiry && o.oi > 0) : [];
+            cboeDiag.contracts = expiryOpts.length;
+            cboeDiag.oiSum = expiryOpts.reduce((s, o) => s + o.oi, 0);
+
+            if (expiryOpts.length < 10 || cboeDiag.oiSum < 500) {
+              gexSkipReason = "OI yetersiz — GEX güvenilir değil";
+            } else {
+              const gexSpot = spot > 0 ? spot : cboe.spot;
+              const frontT = frontChain ? Math.max(frontChain.dte, 1) / 365 : 30 / 365;
+              const gexContracts: GexContractInput[] = expiryOpts.map(o => ({
+                strike: o.strike,
+                type: o.type,
+                openInterest: o.oi,
+                iv: (o.iv > 0.03 && o.iv < 5) ? o.iv : ((atmIvFront ?? 30) / 100),
+              }));
+              gex = computeGexProfile(gexSpot, frontT, gexContracts);
             }
-            gex = computeGexProfile(spot, frontT, gexContracts);
           }
 
           // GEX levels: windowed ±25% around spot
@@ -647,6 +664,7 @@ export const signallabRouter = router({
             : sellGate({ vrp, termContango, earningsInWindow, ivPercentile: ivData.ivRank });
 
           // Diagnostics
+          const allFrontOpts = frontChain ? [...frontChain.calls, ...frontChain.puts] : [];
           const diag = frontChain ? {
             expiry: frontExpiry,
             contracts: allFrontOpts.length,
@@ -657,6 +675,7 @@ export const signallabRouter = router({
               .sort((a, b) => Math.abs(a.strike - spot) - Math.abs(b.strike - spot))
               .slice(0, 3)
               .map(o => ({ strike: o.strike, bid: o.bid, ask: o.ask, iv: Number(o.iv.toFixed(1)), oi: o.oi, last: o.last })),
+            cboe: cboeDiag,
           } : null;
 
           return {
