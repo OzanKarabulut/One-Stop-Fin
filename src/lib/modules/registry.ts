@@ -5,12 +5,20 @@ import {
   GraduationCap,
   FileText,
   Podcast,
+  Shield,
+  Brain,
+  Activity,
+  Target,
+  PenTool,
+  Globe,
+  Eye,
   type LucideIcon,
 } from "lucide-react";
 
 export interface ModuleItem {
   href: string;
   labelKey: string;
+  icon?: LucideIcon;
 }
 
 export interface ModuleDefinition {
@@ -28,13 +36,13 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
     icon: TrendingUp,
     implemented: true,
     items: [
-      { href: "/dashboard/signallab/csp-screener", labelKey: "modules.signallab.csp" },
-      { href: "/dashboard/signallab/ai-strategy", labelKey: "modules.signallab.aiStrategy" },
-      { href: "/dashboard/signallab/manual", labelKey: "modules.signallab.manual" },
-      { href: "/dashboard/signallab/vol-console", labelKey: "modules.signallab.volConsole" },
-      { href: "/dashboard/signallab/command-center", labelKey: "modules.signallab.commandCenter" },
-      { href: "/dashboard/signallab/market-overview", labelKey: "modules.signallab.market" },
-      { href: "/dashboard/signallab/watchlist", labelKey: "modules.signallab.watchlist" },
+      { href: "/dashboard/signallab/csp-screener", labelKey: "modules.signallab.csp", icon: Shield },
+      { href: "/dashboard/signallab/ai-strategy", labelKey: "modules.signallab.aiStrategy", icon: Brain },
+      { href: "/dashboard/signallab/vol-console", labelKey: "modules.signallab.volConsole", icon: Activity },
+      { href: "/dashboard/signallab/command-center", labelKey: "modules.signallab.commandCenter", icon: Target },
+      { href: "/dashboard/signallab/manual", labelKey: "modules.signallab.manual", icon: PenTool },
+      { href: "/dashboard/signallab/market-overview", labelKey: "modules.signallab.market", icon: Globe },
+      { href: "/dashboard/signallab/watchlist", labelKey: "modules.signallab.watchlist", icon: Eye },
     ],
   },
   {

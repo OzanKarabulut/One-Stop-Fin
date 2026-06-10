@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Home, ChevronDown, ChevronRight, Star, X } from "lucide-react";
+import { Home, ChevronDown, ChevronRight, Star, X, type LucideIcon } from "lucide-react";
 import { MODULE_REGISTRY } from "@/lib/modules/registry";
 import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc/client";
@@ -20,11 +20,12 @@ function t(key: string): string {
 
 interface FavoriteItem { href: string; labelKey: string; order: number; }
 
-function SubItem({ href, label, isActive, starred, onStar }: { href: string; label: string; isActive: boolean; starred: boolean; onStar: () => void }) {
+function SubItem({ href, label, isActive, starred, onStar, icon: Icon }: { href: string; label: string; isActive: boolean; starred: boolean; onStar: () => void; icon?: LucideIcon }) {
   const router = useRouter();
   return (
-    <div className={`group flex items-center h-[38px] pl-[42px] pr-3 transition-colors cursor-pointer ${isActive ? "bg-[#141414] border-l-2 border-[#ff7200]" : "hover:bg-white/[0.03] border-l-2 border-transparent"}`}
+    <div className={`group flex items-center h-[38px] pl-[32px] pr-3 transition-colors cursor-pointer ${isActive ? "bg-[#141414] border-l-2 border-[#ff7200]" : "hover:bg-white/[0.03] border-l-2 border-transparent"}`}
       onClick={() => router.push(href)}>
+      {Icon && <Icon size={14} className={`mr-2 shrink-0 ${isActive ? "text-[#ff7200]" : "text-white/80"}`} />}
       <span className={`text-sm flex-1 tracking-tight ${isActive ? "text-[#ff7200] font-bold" : "text-white font-semibold"}`}>{label}</span>
       <button
         type="button"
@@ -68,12 +69,12 @@ export function Sidebar() {
     <aside className="w-[264px] h-screen bg-[#060606] border-r border-white/[0.08] flex flex-col overflow-y-auto shrink-0">
 
       {/* Brand */}
-      <div className="flex items-center gap-3 h-[56px] px-4 border-b border-white/[0.06]">
-        <div className="w-7 h-7 rounded-md bg-[#ff7200] flex items-center justify-center">
-          <span className="text-white text-sm font-bold">O</span>
+      <Link href="/dashboard" className="flex items-center gap-3 h-[68px] px-4 border-b border-white/[0.08] hover:bg-white/[0.03] transition-colors">
+        <div className="w-10 h-10 rounded-lg bg-[#ff7200] flex items-center justify-center border-2 border-[#ff7200]/60 shadow-lg shadow-[#ff7200]/20">
+          <span className="text-white text-lg font-bold">O</span>
         </div>
-        <div className="text-base font-bold tracking-tight text-white">One-Stop-Fin</div>
-      </div>
+        <div className="text-lg font-bold tracking-tight text-white">One-Stop-Fin</div>
+      </Link>
 
       {/* Home */}
       <Link href="/dashboard"
@@ -124,6 +125,7 @@ export function Sidebar() {
                     const starred = isFav(item.href);
                     return (
                       <SubItem key={item.href} href={item.href} label={label} isActive={isActive} starred={starred}
+                        icon={item.icon}
                         onStar={() => starred ? removeFav(item.href) : addFav(item.href, label)} />
                     );
                   })}
