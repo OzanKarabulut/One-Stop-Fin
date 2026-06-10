@@ -17,7 +17,7 @@ export interface MarketEvent {
   category: EventCategory;
   type: EventType;
   importance: Importance;
-  time?: string;         // ör. "08:30 ET"
+  time?: string;         // ör. "15:30 TR"
   note?: string;
 }
 
@@ -102,7 +102,7 @@ function nfpDays(year: number): MarketEvent[] {
   for (let m = 0; m < 12; m++) {
     let d = nthWeekday(year, m, 5, 1);
     if (isHoliday(d)) d = prevBusinessDay(d);
-    out.push({ date: ymd(d), name: "Tarım Dışı İstihdam (NFP)", category: "makro", type: "nfp", importance: 3, time: "08:30 ET", note: "istihdam raporu" });
+    out.push({ date: ymd(d), name: "Tarım Dışı İstihdam (NFP)", category: "makro", type: "nfp", importance: 3, time: "15:30 TR", note: "istihdam raporu" });
   }
   return out;
 }
@@ -113,16 +113,16 @@ function fomc(): MarketEvent[] {
   return FOMC_2026.map((date) => ({
     date,
     name: FOMC_SEP.has(date) ? "FOMC Faiz Kararı + Dot Plot" : "FOMC Faiz Kararı",
-    category: "makro" as const, type: "fomc" as const, importance: 3 as const, time: "14:00 ET",
+    category: "makro" as const, type: "fomc" as const, importance: 3 as const, time: "21:00 TR",
   }));
 }
 
 // Makro veri statik tablosu — BLS/BEA takvimine göre DOĞRULA/GÜNCELLE.
 const MACRO_2026: MarketEvent[] = [
-  { date: "2026-06-10", name: "CPI (Mayıs enflasyon)", category: "makro", type: "cpi", importance: 3, time: "08:30 ET" },
-  { date: "2026-06-11", name: "PPI (Üretici Fiyatları)", category: "makro", type: "ppi", importance: 2, time: "08:30 ET" },
-  { date: "2026-06-26", name: "PCE (Çekirdek Enflasyon)", category: "makro", type: "pce", importance: 3, time: "08:30 ET" },
-  { date: "2026-07-15", name: "CPI (Haziran enflasyon)", category: "makro", type: "cpi", importance: 3, time: "08:30 ET" },
+  { date: "2026-06-10", name: "CPI (Mayıs enflasyon)", category: "makro", type: "cpi", importance: 3, time: "15:30 TR" },
+  { date: "2026-06-11", name: "PPI (Üretici Fiyatları)", category: "makro", type: "ppi", importance: 2, time: "15:30 TR" },
+  { date: "2026-06-26", name: "PCE (Çekirdek Enflasyon)", category: "makro", type: "pce", importance: 3, time: "15:30 TR" },
+  { date: "2026-07-15", name: "CPI (Haziran enflasyon)", category: "makro", type: "cpi", importance: 3, time: "15:30 TR" },
 ];
 
 export function generateMarketEvents(year = 2026): MarketEvent[] {

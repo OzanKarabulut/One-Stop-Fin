@@ -13,7 +13,7 @@ export const EVENT_KNOWLEDGE: Partial<Record<EventType, EventDetail>> = {
     mantik: "Aylık tüketici enflasyonu — Fed'in faiz patikasının ana girdisi. Manşet ve çekirdek (gıda/enerji hariç) izlenir.",
     sicak: "Beklenti üstü: faiz indirimi beklentisi geriler → 10Y faiz ↑, uzun-vadeli/teknoloji hisseleri ↓, USD ↑, VIX ↑.",
     soguk: "Beklenti altı: indirim ihtimali ↑ → risk iştahı ↑, Russell/teknoloji rally eğilimi.",
-    tarihsel: "S&P CPI günü ortalama ±1–1.5% gün-içi hareket; açıklama 08:30 ET, ilk 30 dk en oynak.",
+    tarihsel: "S&P CPI günü ortalama ±1–1.5% gün-içi hareket; açıklama 15:30 TR, ilk 30 dk en oynak.",
     opsiyon: "IV açıklama öncesi şişer, sonrası crush. Vade içinde CPI olan put satışında yüksek prim ama gap riski.",
   },
   ppi: {
@@ -34,14 +34,14 @@ export const EVENT_KNOWLEDGE: Partial<Record<EventType, EventDetail>> = {
     mantik: "Tarım dışı istihdam + işsizlik + saatlik kazanç. İstihdam-enflasyon dengesinin kalbi.",
     sicak: "Güçlü istihdam + ücret artışı: 'higher for longer' → faiz ↑, hisse baskı.",
     soguk: "Zayıf istihdam: indirim beklentisi ↑ ama çok zayıfsa resesyon korkusu → karışık tepki.",
-    tarihsel: "Ayın ilk Cuma'sı 08:30 ET; yılın en sert tek-gün hareketlerinden bazıları NFP'de.",
+    tarihsel: "Ayın ilk Cuma'sı 15:30 TR; yılın en sert tek-gün hareketlerinden bazıları NFP'de.",
     opsiyon: "Cuma açılışında gap riski yüksek; haftalık put satarken NFP'yi vade içine alma.",
   },
   fomc: {
     mantik: "Faiz kararı + politika metni; dot-plot/SEP toplantılarında üyelerin faiz projeksiyonu da gelir.",
     sicak: "Şahin sürpriz: faizler ↑, hisse ↓, USD ↑.",
     soguk: "Güvercin sürpriz: risk rally; ama 'neden güvercin?' resesyon endişesi tersine çevirebilir.",
-    tarihsel: "Karar 14:00 ET, 14:30 basın toplantısı. Asıl volatilite Powell konuşurken; gün-içi sert ters dönüşler sık.",
+    tarihsel: "Karar 21:00 TR, 21:30 basın toplantısı. Asıl volatilite Powell konuşurken; gün-içi sert ters dönüşler sık.",
     opsiyon: "Klasik IV crush adayı; karar öncesi şişen IV sonrası söner. Iron condor/credit spread cazip ama whipsaw riski.",
   },
   "triple-witching": {

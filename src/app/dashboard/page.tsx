@@ -128,12 +128,12 @@ function CalendarSection({ title, accent, events, openKey, setOpenKey }: {
 }
 
 export default function HomePage() {
-  const { data: market } = trpc.signallab.marketOverview.useQuery();
-  const { data: sectors } = trpc.signallab.sectors.useQuery();
-
   const [mounted, setMounted] = useState(false);
   const [openKey, setOpenKey] = useState<string | null>(null);
   useEffect(() => setMounted(true), []);
+
+  const { data: market } = trpc.signallab.marketOverview.useQuery(undefined, { enabled: mounted });
+  const { data: sectors } = trpc.signallab.sectors.useQuery(undefined, { enabled: mounted });
 
   const events = useMemo(() => generateMarketEvents(2026), []);
   const grouped = useMemo(() => (mounted ? groupUpcoming(events, new Date()) : null), [events, mounted]);
