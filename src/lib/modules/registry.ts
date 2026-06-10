@@ -31,6 +31,8 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
       { href: "/dashboard/signallab/csp-screener", labelKey: "modules.signallab.csp" },
       { href: "/dashboard/signallab/ai-strategy", labelKey: "modules.signallab.aiStrategy" },
       { href: "/dashboard/signallab/manual", labelKey: "modules.signallab.manual" },
+      { href: "/dashboard/signallab/vol-console", labelKey: "modules.signallab.volConsole" },
+      { href: "/dashboard/signallab/command-center", labelKey: "modules.signallab.commandCenter" },
       { href: "/dashboard/signallab/market-overview", labelKey: "modules.signallab.market" },
       { href: "/dashboard/signallab/watchlist", labelKey: "modules.signallab.watchlist" },
     ],

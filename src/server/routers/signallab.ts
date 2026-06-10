@@ -440,4 +440,109 @@ export const signallabRouter = router({
     all: ALL_TICKERS.split(","),
     ozan: OZAN_TICKERS.split(","),
   })),
+
+  // Vol Console scan
+  volScan: publicProcedure
+    .input(z.object({
+      watchlist: z.enum(["all", "ozan", "custom"]).default("all"),
+      customTickers: z.string().optional(),
+      dte: z.number().default(30),
+    }))
+    .query(async ({ input }) => {
+      let tickerStr: string;
+      switch (input.watchlist) {
+        case "ozan": tickerStr = OZAN_TICKERS; break;
+        case "custom": tickerStr = input.customTickers ?? ALL_TICKERS; break;
+        default: tickerStr = ALL_TICKERS;
+      }
+      const tickers = tickerStr.split(",").map((t) => t.trim().toUpperCase()).filter(Boolean);
+      const { historicalVol } = await import("@/lib/vol-math");
+      const { computeGexProfile } = await import("@/lib/gex");
+      const { sellGate } = await import("@/lib/sell-gate");
+
+      const results = await Promise.all(tickers.map(async (ticker) => {
+        try {
+          const T = input.dte / 365;
+          // Fetch price history for HV
+          const chartUrl = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=6mo`;
+          const chartJson = await yahoo.fetchJSON(chartUrl) as {
+            chart?: { result?: Array<{ meta?: { regularMarketPrice?: number }; indicators?: { quote?: Array<{ close?: (number | null)[] }> } }> };
+          };
+          const meta = chartJson?.chart?.result?.[0]?.meta;
+          const spot = meta?.regularMarketPrice ?? 0;
+          const closes = (chartJson?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? []).filter((c): c is number => c !== null);
+
+          const hv20 = historicalVol(closes, 20);
+          const hv60 = historicalVol(closes, 60);
+
+          // Fetch option chain for ATM IV and GEX
+          const expiryInfo = await marketData.getExpirations(ticker);
+          const targetDate = new Date(Date.now() + input.dte * 86400000).toISOString().slice(0, 10);
+          const frontExpiry = findBestExpiry(expiryInfo.expirations, targetDate) ?? expiryInfo.expirations[0];
+          const backExpiry = expiryInfo.expirations.find((e) => {
+            const d = new Date(e + "T00:00:00Z");
+            const diff = Math.ceil((d.getTime() - Date.now()) / 86400000);
+            return diff > input.dte + 14;
+          }) ?? expiryInfo.expirations[expiryInfo.expirations.length - 1];
+
+          const frontTs = expiryInfo.expirationTimestamps[frontExpiry ?? ""];
+          const frontChain = frontExpiry ? await marketData.getChain(ticker, frontExpiry, frontTs) : null;
+          const backTs = expiryInfo.expirationTimestamps[backExpiry ?? ""];
+          const backChain = backExpiry && backExpiry !== frontExpiry ? await marketData.getChain(ticker, backExpiry, backTs) : null;
+
+          // ATM IV from front
+          const allFrontOpts = [...(frontChain?.puts ?? []), ...(frontChain?.calls ?? [])];
+          const atmOpt = allFrontOpts.reduce((best, cur) =>
+            Math.abs(cur.strike - spot) < Math.abs((best?.strike ?? 9999) - spot) ? cur : best, allFrontOpts[0]);
+          const atmIvFront = atmOpt?.iv ?? null;
+
+          // ATM IV from back
+          const allBackOpts = [...(backChain?.puts ?? []), ...(backChain?.calls ?? [])];
+          const atmBack = allBackOpts.reduce((best, cur) =>
+            Math.abs(cur.strike - spot) < Math.abs((best?.strike ?? 9999) - spot) ? cur : best, allBackOpts[0]);
+          const atmIvBack = atmBack?.iv ?? null;
+
+          // VRP = ATM IV - HV20
+          const vrp = atmIvFront !== null && hv20 !== null ? (atmIvFront / 100) - hv20 : null;
+          // Term contango = front IV > back IV
+          const termContango = atmIvFront !== null && atmIvBack !== null ? atmIvFront > atmIvBack : null;
+
+          // Skew25: 25-delta put IV vs ATM IV
+          const puts25 = (frontChain?.puts ?? []).filter((p) => {
+            const moneyness = (spot - p.strike) / spot;
+            return moneyness > 0.03 && moneyness < 0.12 && p.iv > 0;
+          });
+          const skew25 = puts25.length > 0 && atmIvFront
+            ? (puts25.reduce((s, p) => s + p.iv, 0) / puts25.length) - atmIvFront
+            : null;
+
+          // GEX
+          const gexContracts = allFrontOpts.map((o) => ({
+            strike: o.strike,
+            type: (frontChain?.calls ?? []).includes(o) ? "call" as const : "put" as const,
+            openInterest: o.oi,
+            iv: o.iv > 0 ? o.iv / 100 : 0.3,
+          }));
+          const gex = spot > 0 ? computeGexProfile(spot, T, gexContracts) : null;
+
+          // IV percentile
+          const ivData = await yahoo.fetchIVRank(ticker).catch(() => ({ ivRank: 50, currentIV: 25 }));
+
+          // Sell gate
+          const gate = sellGate({ vrp, termContango, earningsInWindow: null, ivPercentile: ivData.ivRank });
+
+          return {
+            ticker, spot, hv20, hv60, atmIvFront, atmIvBack, vrp, termContango, skew25,
+            gex: gex ? { levels: gex.levels.slice(-20), flip: gex.flip, callWall: gex.callWall, putWall: gex.putWall, totalNetGex: gex.totalNetGex } : null,
+            ivPercentile: ivData.ivRank,
+            gate,
+            error: null,
+          };
+        } catch (err) {
+          return { ticker, spot: 0, hv20: null, hv60: null, atmIvFront: null, atmIvBack: null, vrp: null, termContango: null, skew25: null, gex: null, ivPercentile: null, gate: null, error: err instanceof Error ? err.message : "Hata" };
+        }
+      }));
+
+      return { results };
+    }),
 });

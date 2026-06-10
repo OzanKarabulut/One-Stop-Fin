@@ -255,7 +255,7 @@ async function ensureCrumb(): Promise<{ crumb: string; cookies: string }> {
 
 // ─── Low-level fetch ─────────────────────────────────────────────────────────
 
-async function fetchJSON(urlStr: string): Promise<unknown> {
+export async function fetchJSON(urlStr: string): Promise<unknown> {
   // v8 chart endpoints work without crumb
   const isChartAPI = urlStr.includes("/v8/finance/chart/");
 

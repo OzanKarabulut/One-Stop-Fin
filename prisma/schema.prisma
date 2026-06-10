@@ -92,3 +92,32 @@ model UserPref {
   theme        String @default("light")
   sidebarState Json   @default("{}")
 }
+
+model Position {
+  id            Int       @id @default(autoincrement())
+  ticker        String
+  strategy      String    // "CSP" | "CC" | "WHEEL" | other
+  optionType    String    // "put" | "call"
+  strike        Float
+  expiry        DateTime
+  contracts     Int
+  entryCredit   Float     // total premium received in USD (positive)
+  predictedPwin Float?    // model's predicted win probability at entry, 0..1
+  openedAt      DateTime  @default(now())
+  status        String    @default("open") // "open" | "closed"
+  closedAt      DateTime?
+  exitDebit     Float?    // total USD paid to close (0 if expired worthless)
+  realizedPnl   Float?
+  notes         String?
+  @@index([status])
+}
+
+model VolSnapshot {
+  id     Int      @id @default(autoincrement())
+  ticker String
+  date   DateTime @default(now())
+  atmIv  Float
+  hv20   Float?
+  @@unique([ticker, date])
+  @@index([ticker])
+}
