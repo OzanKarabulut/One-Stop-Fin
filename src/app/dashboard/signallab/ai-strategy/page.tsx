@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { trpc } from "@/lib/trpc/client";
 import { cn } from "@/lib/utils";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/server/root";
 import { useScanState } from "@/hooks/useScanState";
+import { TickerChips, resolveTickers } from "@/components/ui/TickerChips";
 import { usd } from "@/lib/format";
 import { pnlAt, type Leg } from "@/lib/real-world-pricing";
 import {
@@ -15,14 +16,13 @@ import {
   TrendingUp,
   TrendingDown,
   Minus,
-  Pencil,
   ChevronDown,
   ChevronRight,
   X,
   BarChart3,
 } from "lucide-react";
 
-const DEFAULT_LIST = "NASA,RKLB,DRAM,MRVL,NNE,AMBA,CBRS,OSCR,EOSE,BMNR,IREN,CLS,MU,CRDO,SNDK,AAOI,PENG,GLW";
+const DEFAULT_PERSONAL = "NASA,RKLB,DRAM,MRVL,NNE,AMBA,CBRS,OSCR,EOSE,BMNR,IREN,CLS,MU,CRDO,SNDK,AAOI,PENG,GLW";
 
 function scoreColor(score: number): string {
   if (score >= 65) return "text-emerald-400";
@@ -362,15 +362,29 @@ function StrategyCard({ strategy, rank }: { strategy: StrategyItem; rank: number
 
 export default function AIStrategyPage() {
   const {
-    fridays, mode, setMode, list: myList, setList: setMyList,
-    customTickers, setCustomTickers, budget, setBudget,
-    expiry, setExpiry, editingList, setEditingList, scanWatchlist, scanTickers,
-  } = useScanState({ prefix: "ai", defaultList: DEFAULT_LIST, defaultBudget: 250000 });
+    fridays, customTickers, setCustomTickers, budget, setBudget,
+    expiry, setExpiry, editingList, setEditingList,
+  } = useScanState({ prefix: "ai", defaultList: DEFAULT_PERSONAL, defaultBudget: 250000 });
+
+  const [personalList, setPersonalList] = useState(DEFAULT_PERSONAL);
+  useEffect(() => {
+    const saved = localStorage.getItem("csp_my_list");
+    if (saved) setPersonalList(saved);
+  }, []);
+  useEffect(() => { localStorage.setItem("csp_my_list", personalList); }, [personalList]);
+
+  const [activeChips, setActiveChips] = useState<string[]>(["listem"]);
   const [scanning, setScanning] = useState(false);
 
+  const personalTickers = personalList.split(",").map(t => t.trim()).filter(Boolean);
+  const resolvedTickers = resolveTickers(activeChips, personalTickers, customTickers);
+
+  const SECONDS_PER_TICKER = 2;
+  const tickerCount = resolvedTickers.length;
+
   const scanInput = useMemo(
-    () => ({ watchlist: scanWatchlist, customTickers: scanTickers, expiry, budget }),
-    [scanWatchlist, scanTickers, expiry, budget],
+    () => ({ watchlist: "custom" as const, customTickers: resolvedTickers.join(","), expiry, budget }),
+    [resolvedTickers, expiry, budget],
   );
 
   const { data, error, refetch, isFetching } = trpc.signallab.aiStrategyScan.useQuery(scanInput, { enabled: false, refetchOnWindowFocus: false });
@@ -398,35 +412,18 @@ export default function AIStrategyPage() {
 
       {/* Search Bar */}
       <div className="rounded-xl border border-white/10 bg-[#0b0b0c] p-4">
-        <div className="flex flex-wrap items-end gap-4">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-1">
-              {(["mylist", "all", "custom"] as const).map((m) => (
-                <button key={m} onClick={() => setMode(m)}
-                  className={cn("rounded-md px-3 py-2 text-sm font-bold transition-colors", mode === m ? "bg-[#ff7200] text-white" : "bg-white/5 text-white/90 hover:bg-white/10")}>
-                  {m === "mylist" ? "Listem" : m === "all" ? "Tümü" : "Özel"}
-                </button>
-              ))}
-              <button onClick={() => setEditingList((v) => !v)} title="Listeyi düzenle" className="rounded-md p-2 text-white/90 hover:bg-white/10 hover:text-white">
-                <Pencil className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
+        <TickerChips
+          value={activeChips}
+          onChange={setActiveChips}
+          personalTickers={personalTickers}
+          onPersonalTickersChange={(next) => setPersonalList(next.join(","))}
+          customText={customTickers}
+          onCustomTextChange={setCustomTickers}
+          editingList={editingList}
+          onEditingListChange={setEditingList}
+        />
 
-          {editingList && (
-            <div className="w-full space-y-1.5">
-              <label className={labelClass}>Listem (virgülle)</label>
-              <textarea value={myList} onChange={(e) => setMyList(e.target.value.toUpperCase())} rows={2} className={cn(inputClass, "w-full")} />
-            </div>
-          )}
-
-          {mode === "custom" && (
-            <div className="min-w-[200px] flex-1 space-y-1.5">
-              <label className={labelClass}>Tickers</label>
-              <input type="text" value={customTickers} onChange={(e) => setCustomTickers(e.target.value.toUpperCase())} placeholder="TSLA,NVDA..." className={cn(inputClass, "w-full uppercase")} />
-            </div>
-          )}
-
+        <div className="border-t border-white/10 mt-4 pt-4 flex flex-wrap items-center gap-4">
           <div className="space-y-1.5">
             <label className={labelClass}>Bütçe&nbsp;</label>
             <input type="text" inputMode="numeric" value={usd(budget)}
@@ -446,6 +443,11 @@ export default function AIStrategyPage() {
             {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
             {isLoading ? "Analiz ediliyor..." : "Analiz Et"}
           </button>
+
+          <span className={`text-sm font-bold ${tickerCount > 25 ? "text-yellow-400" : "text-white/90"}`}
+            title={tickerCount > 25 ? "Geniş tarama — sonuç listesi çok uzayacak" : ""}>
+            {tickerCount} hisse · ~{tickerCount * SECONDS_PER_TICKER}sn
+          </span>
         </div>
       </div>
 
@@ -462,6 +464,9 @@ export default function AIStrategyPage() {
           {[0, 1, 2].map((i) => <div key={i} className="h-24 animate-pulse rounded-xl border border-white/10 bg-[#0e0e10]" />)}
         </div>
       )}
+
+      {/* Capped warning */}
+      {data?.capped && <div className="text-yellow-400 font-bold text-sm mb-2">İlk 40 hisse tarandı ({data.originalCount} seçilmişti)</div>}
 
       {/* Bucket Results */}
       {data && (

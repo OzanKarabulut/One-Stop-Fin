@@ -4,8 +4,9 @@ import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { trpc } from "@/lib/trpc/client";
 import { useScanState } from "@/hooks/useScanState";
+import { TickerChips, resolveTickers } from "@/components/ui/TickerChips";
 import { cn } from "@/lib/utils";
-import { TrendingUp, Loader2, AlertTriangle, Activity, Pencil } from "lucide-react";
+import { TrendingUp, Loader2, AlertTriangle, Activity } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Cell } from "recharts";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/server/root";
@@ -127,13 +128,18 @@ export default function VolConsolePage() {
 function VolConsoleInner() {
   const searchParams = useSearchParams();
   const {
-    mode, setMode, list, setList, customTickers, setCustomTickers,
-    editingList, setEditingList, scanWatchlist, scanTickers,
+    list, setList, customTickers, setCustomTickers,
+    editingList, setEditingList,
   } = useScanState({ prefix: "csp", defaultList: DEFAULT_CSP_LIST, defaultBudget: 0 });
   const [dte, setDte] = useState(30);
   const [scanning, setScanning] = useState(false);
   const [openDetails, setOpenDetails] = useState<Record<string, boolean>>({});
   const toggleDetail = useCallback((t: string) => setOpenDetails(prev => ({ ...prev, [t]: !prev[t] })), []);
+
+  const [activeChips, setActiveChips] = useState<string[]>(["listem"]);
+
+  const personalTickers = list.split(",").map(t => t.trim()).filter(Boolean);
+  const resolvedTickers = resolveTickers(activeChips, personalTickers, customTickers);
 
   useEffect(() => {
     const dteParam = searchParams.get("dte");
@@ -141,8 +147,8 @@ function VolConsoleInner() {
   }, [searchParams]);
 
   const scanInput = useMemo(
-    () => ({ watchlist: scanWatchlist, customTickers: scanTickers, dte }),
-    [scanWatchlist, scanTickers, dte],
+    () => ({ watchlist: "custom" as const, customTickers: resolvedTickers.join(","), dte }),
+    [resolvedTickers, dte],
   );
 
   const { data, error, refetch, isFetching } = trpc.signallab.volScan.useQuery(scanInput, { enabled: false, refetchOnWindowFocus: false });
@@ -162,34 +168,12 @@ function VolConsoleInner() {
       {/* Controls */}
       <div className="rounded-xl border border-white/10 bg-[#0b0b0c] p-4">
         <div className="flex flex-wrap items-end gap-5">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-1">
-              {(["mylist", "all", "custom"] as const).map((m) => (
-                <button key={m} onClick={() => setMode(m)}
-                  className={cn("rounded-md px-3 py-2 text-sm font-bold transition-colors", mode === m ? "bg-[#ff7200] text-white" : "bg-white/5 text-white/90 hover:bg-white/10")}>
-                  {m === "mylist" ? "Listem" : m === "all" ? "Tümü" : "Özel"}
-                </button>
-              ))}
-              <button onClick={() => setEditingList((v) => !v)} title="Listeyi düzenle" className="rounded-md p-2 text-white/90 hover:bg-white/10 hover:text-white">
-                <Pencil className="h-4 w-4" />
-              </button>
-            </div>
+          <div className="space-y-1.5 flex-1">
+            <TickerChips value={activeChips} onChange={setActiveChips} personalTickers={personalTickers} onPersonalTickersChange={(next) => setList(next.join(","))} customText={customTickers} onCustomTextChange={setCustomTickers} editingList={editingList} onEditingListChange={setEditingList} />
           </div>
+        </div>
 
-          {editingList && (
-            <div className="w-full space-y-1.5">
-              <label className={labelClass}>Listem (virgülle)</label>
-              <textarea value={list} onChange={(e) => setList(e.target.value.toUpperCase())} rows={2} className={cn(inputClass, "w-full")} />
-            </div>
-          )}
-
-          {mode === "custom" && (
-            <div className="min-w-[200px] flex-1 space-y-1.5">
-              <label className={labelClass}>Tickers</label>
-              <input type="text" value={customTickers} onChange={(e) => setCustomTickers(e.target.value.toUpperCase())} placeholder="TSLA,NVDA..." className={cn(inputClass, "w-full uppercase")} />
-            </div>
-          )}
-
+        <div className="flex flex-wrap items-end gap-5 mt-4">
           <div className="space-y-1.5">
             <label className={labelClass}>DTE</label>
             <input type="number" value={dte} onChange={(e) => setDte(Number(e.target.value) || 30)} min={7} max={90} className={cn(inputClass, "w-20 tabular-nums")} />
@@ -200,6 +184,9 @@ function VolConsoleInner() {
             {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <TrendingUp className="h-4 w-4" />}
             {isLoading ? "Taranıyor..." : "Tara"}
           </button>
+          <span className={`text-sm font-bold ${resolvedTickers.length > 60 ? "text-yellow-400" : "text-white/90"}`} title={resolvedTickers.length > 60 ? "Büyük tarama — süre uzayacak" : ""}>
+            {resolvedTickers.length} hisse · ~{resolvedTickers.length * 2}sn
+          </span>
         </div>
       </div>
 
@@ -207,6 +194,10 @@ function VolConsoleInner() {
         <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-300">
           <AlertTriangle className="h-4 w-4 shrink-0" /> {error.message}
         </div>
+      )}
+
+      {(data as typeof data & { capped?: boolean; originalCount?: number })?.capped && (
+        <div className="text-yellow-400 font-bold text-sm">İlk 80 hisse tarandı ({(data as typeof data & { originalCount?: number })?.originalCount} seçilmişti)</div>
       )}
 
       {/* Results */}

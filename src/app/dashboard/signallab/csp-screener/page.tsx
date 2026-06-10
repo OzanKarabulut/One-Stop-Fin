@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/server/root";
 import { useScanState } from "@/hooks/useScanState";
+import { TickerChips, resolveTickers } from "@/components/ui/TickerChips";
 import { usd, otmPct } from "@/lib/format";
 import {
   TrendingUp,
@@ -17,7 +18,6 @@ import {
   Loader2,
   AlertTriangle,
   Target,
-  Pencil,
   ChevronDown,
   ChevronRight,
   X,
@@ -305,15 +305,20 @@ function CSPScreenerInner() {
   const autoScanned = useRef(false);
 
   const {
-    fridays, mode, setMode, list: cspList, setList: setCspList,
+    fridays, list: cspList, setList: setCspList,
     customTickers, setCustomTickers, budget, setBudget,
-    expiry, setExpiry, editingList, setEditingList, scanWatchlist, scanTickers,
+    expiry, setExpiry, editingList, setEditingList,
   } = useScanState({ prefix: "csp", defaultList: DEFAULT_CSP_LIST, defaultBudget: 250000 });
   const [minOI, setMinOI] = useState(0);
   const [sortKey, setSortKey] = useState<SortKey>("score");
   const [hideK4, setHideK4] = useState(false);
   const [basket, setBasket] = useState<BasketItem[]>([]);
   const [scanning, setScanning] = useState(false);
+
+  const [activeChips, setActiveChips] = useState<string[]>(["listem"]);
+
+  const personalTickers = cspList.split(",").map(t => t.trim()).filter(Boolean);
+  const resolvedTickers = resolveTickers(activeChips, personalTickers, customTickers);
 
   // Load basket from localStorage after mount to avoid hydration mismatch
   useEffect(() => {
@@ -322,11 +327,11 @@ function CSPScreenerInner() {
 
   const scanInput = useMemo(
     () => ({
-      watchlist: (paramTicker && !autoScanned.current ? "custom" : scanWatchlist) as "all" | "custom",
-      customTickers: paramTicker && !autoScanned.current ? paramTicker : scanTickers,
+      watchlist: "custom" as const,
+      customTickers: paramTicker && !autoScanned.current ? paramTicker : resolvedTickers.join(","),
       expiry, minOI,
     }),
-    [scanWatchlist, scanTickers, expiry, minOI, paramTicker],
+    [resolvedTickers, expiry, minOI, paramTicker],
   );
 
   const { data, error, refetch, isFetching } = trpc.signallab.cspScan.useQuery(scanInput, { enabled: false, refetchOnWindowFocus: false });
@@ -338,11 +343,11 @@ function CSPScreenerInner() {
   useEffect(() => {
     if (paramTicker && !autoScanned.current) {
       autoScanned.current = true;
-      setMode("custom");
       setCustomTickers(paramTicker.toUpperCase());
+      setActiveChips(["ozel"]);
       setTimeout(() => { refetch(); }, 100);
     }
-  }, [paramTicker, setMode, setCustomTickers, refetch]);
+  }, [paramTicker, setCustomTickers, refetch]);
 
   useEffect(() => { localStorage.setItem("csp_basket", JSON.stringify(basket)); }, [basket]);
 
@@ -394,33 +399,12 @@ function CSPScreenerInner() {
 
       <div className="rounded-xl border border-white/10 bg-[#0b0b0c] p-4">
         <div className="flex flex-wrap items-end gap-5">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-1">
-              {(["mylist", "all", "custom"] as const).map((m) => (
-                <button key={m} onClick={() => setMode(m)}
-                  className={cn("rounded-md px-3 py-2 text-sm font-bold transition-colors", mode === m ? "bg-[#ff7200] text-white" : "bg-white/5 text-white/90 hover:bg-white/10")}>
-                  {m === "mylist" ? "CSP Listem" : m === "all" ? "Tümü" : "Özel"}
-                </button>
-              ))}
-              <button onClick={() => setEditingList((v) => !v)} title="Listeyi düzenle" className="rounded-md p-2 text-white/90 hover:bg-white/10 hover:text-white">
-                <Pencil className="h-4 w-4" />
-              </button>
-            </div>
+          <div className="space-y-1.5 flex-1">
+            <TickerChips value={activeChips} onChange={setActiveChips} personalTickers={personalTickers} onPersonalTickersChange={(next) => setCspList(next.join(","))} customText={customTickers} onCustomTextChange={setCustomTickers} editingList={editingList} onEditingListChange={setEditingList} />
           </div>
+        </div>
 
-          {editingList && (
-            <div className="w-full space-y-1.5">
-              <label className={labelClass}>CSP Listem (virgülle)</label>
-              <textarea value={cspList} onChange={(e) => setCspList(e.target.value.toUpperCase())} rows={2} className={cn(inputClass, "w-full")} />
-            </div>
-          )}
-
-          {mode === "custom" && (
-            <div className="min-w-[200px] flex-1 space-y-1.5">
-              <label className={labelClass}>Tickers</label>
-              <input type="text" value={customTickers} onChange={(e) => setCustomTickers(e.target.value.toUpperCase())} placeholder="TSLA,NVDA..." className={cn(inputClass, "w-full uppercase")} />
-            </div>
-          )}
+        <div className="border-t border-white/10 mt-4 pt-4 flex flex-wrap items-center gap-5">
 
           <div className="space-y-1.5">
             <label className={labelClass}>Bütçe&nbsp;</label>
@@ -446,6 +430,9 @@ function CSPScreenerInner() {
             {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <TrendingUp className="h-4 w-4" />}
             {isLoading ? "Taranıyor..." : "Tara"}
           </button>
+          <span className={`text-sm font-bold ${resolvedTickers.length > 60 ? "text-yellow-400" : "text-white/90"}`} title={resolvedTickers.length > 60 ? "Büyük tarama — süre uzayacak" : ""}>
+            {resolvedTickers.length} hisse · ~{resolvedTickers.length * 2}sn
+          </span>
         </div>
       </div>
 
@@ -459,6 +446,10 @@ function CSPScreenerInner() {
         <div className="flex items-center gap-2 rounded-lg border border-[#ff7200]/30 bg-[#ff7200]/10 px-4 py-3 text-sm font-bold text-[#ff7200]">
           🛡 GEX Put Wall filtresi aktif — Strike &lt; ${paramMaxStrike} kontratlar işaretlendi
         </div>
+      )}
+
+      {(data as typeof data & { capped?: boolean; originalCount?: number })?.capped && (
+        <div className="text-yellow-400 font-bold text-sm">İlk 80 hisse tarandı ({(data as typeof data & { originalCount?: number }).originalCount} seçilmişti)</div>
       )}
 
       {isLoading && !data && (

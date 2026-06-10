@@ -244,12 +244,15 @@ export const signallabRouter = router({
         default: tickerStr = ALL_TICKERS;
       }
       const tickers = tickerStr.split(",").map((t) => t.trim().toUpperCase()).filter(Boolean);
+      const capped = tickers.length > 80;
+      const originalCount = tickers.length;
+      const cappedTickers = capped ? tickers.slice(0, 80) : tickers;
 
       const allContracts: CSPContract[] = [];
       const allDiags: CSPDiagnostic[] = [];
 
       // Ticker'ları paralel işle — gerçek eşzamanlılık yahoo-finance semaphore'unda sınırlı
-      const settled = await Promise.all(tickers.map(async (t) => {
+      const settled = await Promise.all(cappedTickers.map(async (t) => {
         try {
           const result = await fetchCSPTicker(t, input.expiry, input.minOI);
           // Earnings check — once per ticker
@@ -349,7 +352,7 @@ export const signallabRouter = router({
         "140+": eligible.filter((c) => c.ivBucket === "140+").sort(sortByScore).slice(0, 3),
       };
 
-      return { groups, topPicks, diagnostics: allDiags.sort((a, b) => a.ticker.localeCompare(b.ticker)), classDist, totalContracts: allContracts.length };
+      return { groups, topPicks, diagnostics: allDiags.sort((a, b) => a.ticker.localeCompare(b.ticker)), classDist, totalContracts: allContracts.length, capped, originalCount };
     }),
 
   // Market Overview
@@ -447,7 +450,10 @@ export const signallabRouter = router({
         case "custom": tickerStr = input.customTickers ?? ALL_TICKERS; break;
         default: tickerStr = ALL_TICKERS;
       }
-      const tickers = tickerStr.split(",").map((t) => t.trim().toUpperCase()).filter(Boolean);
+      let tickers = tickerStr.split(",").map((t) => t.trim().toUpperCase()).filter(Boolean);
+      const capped = tickers.length > 40;
+      const originalCount = tickers.length;
+      if (capped) tickers = tickers.slice(0, 40);
 
       const solveIvPct = (o: { strike: number; last: number; iv: number }, spot: number, T: number, isCall: boolean): number | null => {
         if (o.last > 0 && T > 0) {
@@ -586,6 +592,8 @@ export const signallabRouter = router({
           bearish: affordable.filter(s => s.type === "bearish").sort((a, b) => b.compositeScore - a.compositeScore),
         },
         diagnostics: results.filter(r => r.debugReason).map(r => ({ ticker: r.ticker, reason: r.debugReason })),
+        capped,
+        originalCount,
       };
     }),
 
@@ -652,6 +660,9 @@ export const signallabRouter = router({
         default: tickerStr = ALL_TICKERS;
       }
       const tickers = tickerStr.split(",").map((t) => t.trim().toUpperCase()).filter(Boolean);
+      const capped = tickers.length > 80;
+      const originalCount = tickers.length;
+      const cappedTickers = capped ? tickers.slice(0, 80) : tickers;
       const { historicalVol } = await import("@/lib/vol-math");
       const { computeGexProfile } = await import("@/lib/gex");
       const { sellGate } = await import("@/lib/sell-gate");
@@ -686,7 +697,7 @@ export const signallabRouter = router({
         return null;
       };
 
-      const results = await Promise.all(tickers.map(async (ticker) => {
+      const results = await Promise.all(cappedTickers.map(async (ticker) => {
         try {
           // Fetch price history for HV
           const chartUrl = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=6mo`;
@@ -837,6 +848,6 @@ export const signallabRouter = router({
         }
       }));
 
-      return { results };
+      return { results, capped, originalCount };
     }),
 });
