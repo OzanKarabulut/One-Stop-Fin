@@ -10,6 +10,7 @@ import { impliedVolBisection } from "../services/black-scholes";
 import { scoreCSPContract, type IVBucket } from "../services/csp-scoring";
 import { marketData } from "../services/market-data";
 import { db } from "@/lib/db";
+import type { GexContractInput } from "@/lib/gex";
 
 // ─── CSP Screener Constants ──────────────────────────────────────────────────
 
@@ -503,14 +504,14 @@ export const signallabRouter = router({
       const { computeGexProfile } = await import("@/lib/gex");
       const { sellGate } = await import("@/lib/sell-gate");
 
-      const hasLiveMarket = (o: { bid: number; ask: number }) => o.bid > 0 && o.ask > 0;
-      const saneIv = (o: { iv: number }) => o.iv > 3 && o.iv < 500;
-
-      const makeValidator = (opts: Array<{ strike: number; bid: number; ask: number; iv: number; oi: number; last: number }>, spot: number) => {
-        const nearMoney = opts.filter(o => Math.abs(o.strike - spot) <= spot * 0.12);
-        const live = nearMoney.some(hasLiveMarket);
-        return (o: { bid: number; ask: number; iv: number; oi: number; last: number }) =>
-          live ? (hasLiveMarket(o) && saneIv(o)) : (saneIv(o) && (o.oi > 0 || o.last > 0));
+      // ─── FIX 1: Black-Scholes bisection helpers ───────────────────────────
+      const solveIvPct = (o: { strike: number; last: number; iv: number }, spot: number, T: number, isCall: boolean): number | null => {
+        if (o.last > 0 && T > 0) {
+          const bs = impliedVolBisection(o.last, spot, o.strike, T, CSP_RISK_FREE_RATE, isCall);
+          if (bs !== null && bs > 0.03 && bs < 5) return bs * 100;
+        }
+        if (o.iv > 3 && o.iv < 500) return o.iv;
+        return null;
       };
 
       const median = (xs: number[]): number | null => {
@@ -520,18 +521,21 @@ export const signallabRouter = router({
         return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
       };
 
-      const atmIvCalc = (opts: Array<{ strike: number; bid: number; ask: number; iv: number; oi: number; last: number }>, spot: number, validator: (o: any) => boolean): number | null => {
+      const atmIvPct = (chain: { calls: Array<{ strike: number; last: number; iv: number }>; puts: Array<{ strike: number; last: number; iv: number }>; dte: number } | null, spot: number): number | null => {
+        if (!chain || spot <= 0) return null;
+        const T = Math.max(chain.dte, 1) / 365;
         for (const band of [0.05, 0.12]) {
-          const ivs = opts.filter(o => validator(o) && Math.abs(o.strike - spot) <= spot * band).map(o => o.iv);
+          const ivs: number[] = [];
+          for (const c of chain.calls) if (Math.abs(c.strike - spot) <= spot * band) { const v = solveIvPct(c, spot, T, true); if (v !== null) ivs.push(v); }
+          for (const p of chain.puts) if (Math.abs(p.strike - spot) <= spot * band) { const v = solveIvPct(p, spot, T, false); if (v !== null) ivs.push(v); }
           const m = median(ivs);
-          if (m !== null) return m;
+          if (m !== null && ivs.length >= 2) return m;
         }
         return null;
       };
 
       const results = await Promise.all(tickers.map(async (ticker) => {
         try {
-          const T = input.dte / 365;
           // Fetch price history for HV
           const chartUrl = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=6mo`;
           const chartJson = await yahoo.fetchJSON(chartUrl) as {
@@ -559,44 +563,54 @@ export const signallabRouter = router({
           const backTs = expiryInfo.expirationTimestamps[backExpiry ?? ""];
           const backChain = backExpiry && backExpiry !== frontExpiry ? await marketData.getChain(ticker, backExpiry, backTs) : null;
 
-          // Assemble front opts and build validator
-          const allFrontOpts = frontChain ? [...frontChain.calls, ...frontChain.puts] : [];
-          const isValidOpt = makeValidator(allFrontOpts, spot);
-
-          // ATM IV — robust median-based with validator
-          const atmIvFront = frontChain ? atmIvCalc(allFrontOpts, spot, isValidOpt) : null;
-          const allBackOpts = backChain ? [...backChain.calls, ...backChain.puts] : [];
-          const isValidOptBack = allBackOpts.length > 0 ? makeValidator(allBackOpts, spot) : isValidOpt;
-          const atmIvBack = backChain ? atmIvCalc(allBackOpts, spot, isValidOptBack) : null;
+          // ─── FIX 1: ATM IV via bisection ────────────────────────────────────
+          const atmIvFront = atmIvPct(frontChain, spot);
+          const atmIvBack = backChain ? atmIvPct(backChain, spot) : null;
 
           // VRP = ATM IV - HV20
           const vrp = atmIvFront !== null && hv20 !== null ? atmIvFront / 100 - hv20 : null;
           // Term contango = front IV < back IV (normal term structure)
           const termContango = atmIvFront !== null && atmIvBack !== null ? atmIvFront < atmIvBack : null;
 
-          // Skew25: 25-delta put IV vs ATM IV
-          const puts25 = (frontChain?.puts ?? []).filter((p) => {
-            const moneyness = (spot - p.strike) / spot;
-            return moneyness > 0.03 && moneyness < 0.12 && isValidOpt(p);
-          });
-          const skew25 = puts25.length > 0 && atmIvFront
-            ? (puts25.reduce((s, p) => s + p.iv, 0) / puts25.length) - atmIvFront
-            : null;
+          // ─── FIX 2: Skew25 via bisection ────────────────────────────────────
+          let skew25: number | null = null;
+          if (frontChain && atmIvFront !== null && spot > 0) {
+            const frontT = Math.max(frontChain.dte, 1) / 365;
+            const otmPuts = frontChain.puts.filter(p => {
+              const moneyness = (spot - p.strike) / spot;
+              return moneyness >= 0.03 && moneyness <= 0.12 && p.last > 0;
+            });
+            const solvedIvs = otmPuts.map(p => solveIvPct(p, spot, frontT, false)).filter((v): v is number => v !== null);
+            if (solvedIvs.length >= 2) {
+              const avg = solvedIvs.reduce((a, b) => a + b, 0) / solvedIvs.length;
+              skew25 = avg - atmIvFront;
+            }
+          }
 
-          // GEX — liquidity gate
-          const liquid = allFrontOpts.filter(o => o.oi > 0);
-          let gex: Awaited<ReturnType<typeof computeGexProfile>> | null = null;
+          // ─── FIX 3: GEX with per-contract bisection IV + honest OI ─────────
+          let gex: ReturnType<typeof computeGexProfile> | null = null;
           let gexSkipReason: string | null = null;
-          if (liquid.length < 10 || liquid.reduce((s, o) => s + o.oi, 0) < 500) {
-            gexSkipReason = "Opsiyon likiditesi yetersiz (OI verisi az)";
-          } else {
-            const gexContracts = allFrontOpts.filter(o => isValidOpt(o) || o.oi > 0).map((o) => ({
-              strike: o.strike,
-              type: (frontChain?.calls ?? []).includes(o) ? "call" as const : "put" as const,
-              openInterest: o.oi,
-              iv: (isValidOpt(o) ? o.iv : (atmIvFront ?? 30)) / 100,
-            }));
-            gex = spot > 0 ? computeGexProfile(spot, T, gexContracts) : null;
+          const allFrontOpts = frontChain ? [...frontChain.calls, ...frontChain.puts] : [];
+          const withOi = allFrontOpts.filter(o => o.oi > 0);
+
+          if (withOi.length < 10 || withOi.reduce((s, o) => s + o.oi, 0) < 500) {
+            gexSkipReason = withOi.length === 0
+              ? "Yahoo bu sorguda OI verisi sağlamadı — GEX hesaplanamaz"
+              : "Opsiyon OI verisi yetersiz — GEX güvenilir değil";
+          } else if (frontChain) {
+            const frontT = Math.max(frontChain.dte, 1) / 365;
+            const gexContracts: GexContractInput[] = [];
+            for (const c of frontChain.calls) {
+              if (c.oi <= 0) continue;
+              const iv = (solveIvPct(c, spot, frontT, true) ?? atmIvFront ?? 30) / 100;
+              gexContracts.push({ strike: c.strike, type: "call", openInterest: c.oi, iv });
+            }
+            for (const p of frontChain.puts) {
+              if (p.oi <= 0) continue;
+              const iv = (solveIvPct(p, spot, frontT, false) ?? atmIvFront ?? 30) / 100;
+              gexContracts.push({ strike: p.strike, type: "put", openInterest: p.oi, iv });
+            }
+            gex = computeGexProfile(spot, frontT, gexContracts);
           }
 
           // GEX levels: windowed ±25% around spot
