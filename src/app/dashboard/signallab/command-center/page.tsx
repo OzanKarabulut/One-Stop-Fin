@@ -36,8 +36,11 @@ export default function CommandCenterPage() {
   const [closeId, setCloseId] = useState<number | null>(null);
   const [exitDebit, setExitDebit] = useState("");
 
-  const openPositions = trpc.positions.list.useQuery({ status: "open" });
-  const closedPositions = trpc.positions.list.useQuery({ status: "closed" });
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  const openPositions = trpc.positions.list.useQuery({ status: "open" }, { enabled: mounted });
+  const closedPositions = trpc.positions.list.useQuery({ status: "closed" }, { enabled: mounted });
   const utils = trpc.useUtils();
 
   const closeMut = trpc.positions.close.useMutation({

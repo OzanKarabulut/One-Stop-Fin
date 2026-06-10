@@ -7,7 +7,8 @@ import { ComposedChart, Area, Line, XAxis, YAxis, Tooltip, ReferenceLine, Respon
 export default function ForecastCenterPage() {
   const [ticker, setTicker] = useState("");
   const [targetDate, setTargetDate] = useState("");
-  const [queryInput, setQueryInput] = useState<{ ticker: string; targetDate: string } | null>(null);
+  const [mode, setMode] = useState<"single" | "week">("single");
+  const [queryInput, setQueryInput] = useState<{ ticker: string; targetDate: string; mode: "single" | "week" } | null>(null);
 
   const { data, error, isFetching, refetch } = trpc.signallab.forecast.useQuery(
     queryInput!,
@@ -15,8 +16,9 @@ export default function ForecastCenterPage() {
   );
 
   const handleSubmit = () => {
-    if (!ticker || !targetDate) return;
-    setQueryInput({ ticker: ticker.toUpperCase(), targetDate });
+    if (!ticker) return;
+    if (mode === "single" && !targetDate) return;
+    setQueryInput({ ticker: ticker.toUpperCase(), targetDate: mode === "week" ? new Date().toISOString().slice(0, 10) : targetDate, mode });
     setTimeout(() => refetch(), 0);
   };
 
@@ -31,15 +33,27 @@ export default function ForecastCenterPage() {
             placeholder="TICKER"
             className="rounded-lg bg-[#1a1a1f] border border-white/10 px-3 py-2 font-bold text-white/90 w-28 uppercase"
           />
-          <input
-            type="date"
-            value={targetDate}
-            onChange={(e) => setTargetDate(e.target.value)}
-            className="rounded-lg bg-[#1a1a1f] border border-white/10 px-3 py-2 font-bold text-white/90"
-          />
+          <div className="flex gap-1">
+            <button onClick={() => setMode("single")}
+              className={`rounded-lg px-3 py-2 text-sm font-bold transition-colors ${mode === "single" ? "bg-[#ff7200] text-white" : "bg-white/10 text-white/90"}`}>
+              Tek Gün
+            </button>
+            <button onClick={() => setMode("week")}
+              className={`rounded-lg px-3 py-2 text-sm font-bold transition-colors ${mode === "week" ? "bg-[#ff7200] text-white" : "bg-white/10 text-white/90"}`}>
+              1 Haftalık
+            </button>
+          </div>
+          {mode === "single" && (
+            <input
+              type="date"
+              value={targetDate}
+              onChange={(e) => setTargetDate(e.target.value)}
+              className="rounded-lg bg-[#1a1a1f] border border-white/10 px-3 py-2 font-bold text-white/90"
+            />
+          )}
           <button
             onClick={handleSubmit}
-            disabled={isFetching || !ticker || !targetDate}
+            disabled={isFetching || !ticker || (mode === "single" && !targetDate)}
             className="bg-[#ff7200] text-white font-bold rounded-lg px-5 py-2 hover:bg-[#ff8a2b] transition-colors disabled:opacity-50"
           >
             {isFetching ? "Hesaplanıyor..." : "Hesapla"}
@@ -48,7 +62,83 @@ export default function ForecastCenterPage() {
         {error && <p className="mt-2 text-red-400 font-bold text-sm">{error.message}</p>}
       </div>
 
-      {data && (
+      {/* ═══ WEEK MODE RESULTS ═══ */}
+      {data && data.mode === "week" && (
+        <>
+          {/* Cone Chart */}
+          <div className="rounded-lg border border-white/10 bg-[#101013] p-4">
+            <div className="font-bold text-white/90 text-sm mb-2">5 Günlük Tahmin Konisi (1σ Bandı)</div>
+            <ResponsiveContainer width="100%" height={280}>
+              <ComposedChart data={data.days.map(d => ({ date: d.date.slice(5), lower: d.band[0], upper: d.band[1], point: d.point.price }))} margin={{ top: 10, right: 20, bottom: 20, left: 20 }}>
+                <XAxis dataKey="date" tick={{ fill: "#aaa", fontSize: 11, fontWeight: "bold" }} />
+                <YAxis domain={["auto", "auto"]} tick={{ fill: "#aaa", fontSize: 11, fontWeight: "bold" }} />
+                <Tooltip contentStyle={{ background: "#1a1a1f", border: "1px solid rgba(255,255,255,0.1)", fontWeight: "bold" }} />
+                <Area type="monotone" dataKey="upper" stroke="none" fill="#ff720030" />
+                <Area type="monotone" dataKey="lower" stroke="none" fill="#101013" />
+                <Line type="monotone" dataKey="point" stroke="#ff7200" strokeWidth={2} dot={{ fill: "#ff7200", r: 4 }} label={{ fill: "#ff7200", fontSize: 10, fontWeight: "bold", position: "top", formatter: (v: number) => `$${v.toFixed(1)}` }} />
+                {data.gex.putWall && <ReferenceLine y={data.gex.putWall} stroke="#ef4444" strokeDasharray="3 3" label={{ value: "PW", fill: "#ef4444", fontSize: 10, fontWeight: "bold" }} />}
+                {data.gex.callWall && <ReferenceLine y={data.gex.callWall} stroke="#22c55e" strokeDasharray="3 3" label={{ value: "CW", fill: "#22c55e", fontSize: 10, fontWeight: "bold" }} />}
+                {data.days.map((d, i) => d.events.length > 0 ? <ReferenceLine key={`ev-${i}`} x={d.date.slice(5)} stroke="#fbbf24" strokeDasharray="2 2" /> : null)}
+                {data.days.map((d, i) => d.isExpiryDay ? <ReferenceLine key={`exp-${i}`} x={d.date.slice(5)} stroke="#a855f7" strokeDasharray="4 2" label={{ value: "OPEX", fill: "#a855f7", fontSize: 9, fontWeight: "bold" }} /> : null)}
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* 5-row table */}
+          <div className="rounded-lg border border-white/10 bg-[#101013] p-4">
+            <div className="font-bold text-white/90 text-sm mb-2">Günlük Detay</div>
+            <table className="w-full text-xs font-bold">
+              <thead>
+                <tr className="border-b border-white/10">
+                  <th className="text-left py-1 text-white/90">Gün</th>
+                  <th className="text-right py-1 text-white/90">Model Tahmini</th>
+                  <th className="text-right py-1 text-white/90">1σ Bant</th>
+                  <th className="text-right py-1 text-white/90">Bileşenler</th>
+                  <th className="text-left py-1 pl-3 text-white/90">Olaylar</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.days.map((d, i) => (
+                  <tr key={i} className={`border-b border-white/5 ${d.isExpiryDay ? "bg-purple-500/10" : ""}`}>
+                    <td className="py-1.5 text-white/90">{d.date}</td>
+                    <td className="text-right py-1.5 text-white">${d.point.price.toFixed(2)}</td>
+                    <td className="text-right py-1.5 text-white/90">${d.band[0].toFixed(2)} — ${d.band[1].toFixed(2)}</td>
+                    <td className="text-right py-1.5 text-white/70">
+                      Skew:{d.point.skewComponent >= 0 ? "+" : ""}{d.point.skewComponent.toFixed(2)}
+                      {d.isExpiryDay && <span className="ml-1 text-purple-300">Pin:{d.point.pinComponent >= 0 ? "+" : ""}{d.point.pinComponent.toFixed(2)}</span>}
+                    </td>
+                    <td className="text-left py-1.5 pl-3 text-yellow-300/90">
+                      {d.events.map(e => e.name).join(", ") || "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Honesty Box */}
+          <div className="rounded-lg border-2 border-yellow-500/50 bg-yellow-500/5 p-4">
+            <p className="text-xs font-bold text-yellow-300/90">
+              ⚠️ Bu tahmin yalnızca mekanik bir modeldir; piyasa koşullarını garanti etmez. Opsiyon piyasasından türetilen volatilite ile lognormal dağılım kullanılır. Gerçek sonuçlar modellerden sapabilir. Yatırım tavsiyesi değildir. 5 günlük tahminler aynı IV fotoğrafından üretilmiştir — birbirleriyle koreledir ve her sabah yenilenmeleri gerekir.
+            </p>
+          </div>
+
+          {/* Calibration */}
+          {data.calibration.count > 0 && (
+            <div className="rounded-lg border border-white/10 bg-[#101013] p-4">
+              <div className="font-bold text-white/90 text-sm mb-2">Kalibrasyon ({data.calibration.count} tahmin)</div>
+              <div className="grid grid-cols-3 gap-4 text-center text-xs font-bold">
+                <div><div className="text-white/60">Ortalama Z</div><div className="text-white">{data.calibration.meanZ.toFixed(3)}</div></div>
+                <div><div className="text-white/60">Std Z</div><div className="text-white">{data.calibration.stdZ.toFixed(3)}</div></div>
+                <div><div className="text-white/60">Ort |Z|</div><div className="text-white">{data.calibration.meanAbsZ.toFixed(3)}</div></div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ═══ SINGLE MODE RESULTS ═══ */}
+      {data && data.mode === "single" && (
         <>
           {/* Point Forecast Strip */}
           <div className="rounded-lg border border-white/10 bg-[#101013] p-4">
