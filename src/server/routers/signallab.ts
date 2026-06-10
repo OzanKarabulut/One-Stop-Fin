@@ -503,8 +503,15 @@ export const signallabRouter = router({
       const { computeGexProfile } = await import("@/lib/gex");
       const { sellGate } = await import("@/lib/sell-gate");
 
-      const isValidOpt = (o: { bid: number; ask: number; iv: number; oi: number }) =>
-        o.bid > 0 && o.ask > 0 && o.iv > 3 && o.iv < 500;
+      const hasLiveMarket = (o: { bid: number; ask: number }) => o.bid > 0 && o.ask > 0;
+      const saneIv = (o: { iv: number }) => o.iv > 3 && o.iv < 500;
+
+      const makeValidator = (opts: Array<{ strike: number; bid: number; ask: number; iv: number; oi: number; last: number }>, spot: number) => {
+        const nearMoney = opts.filter(o => Math.abs(o.strike - spot) <= spot * 0.12);
+        const live = nearMoney.some(hasLiveMarket);
+        return (o: { bid: number; ask: number; iv: number; oi: number; last: number }) =>
+          live ? (hasLiveMarket(o) && saneIv(o)) : (saneIv(o) && (o.oi > 0 || o.last > 0));
+      };
 
       const median = (xs: number[]): number | null => {
         if (xs.length === 0) return null;
@@ -513,9 +520,9 @@ export const signallabRouter = router({
         return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
       };
 
-      const atmIv = (opts: Array<{ strike: number; bid: number; ask: number; iv: number; oi: number }>, spot: number): number | null => {
+      const atmIvCalc = (opts: Array<{ strike: number; bid: number; ask: number; iv: number; oi: number; last: number }>, spot: number, validator: (o: any) => boolean): number | null => {
         for (const band of [0.05, 0.12]) {
-          const ivs = opts.filter(o => isValidOpt(o) && Math.abs(o.strike - spot) <= spot * band).map(o => o.iv);
+          const ivs = opts.filter(o => validator(o) && Math.abs(o.strike - spot) <= spot * band).map(o => o.iv);
           const m = median(ivs);
           if (m !== null) return m;
         }
@@ -552,9 +559,15 @@ export const signallabRouter = router({
           const backTs = expiryInfo.expirationTimestamps[backExpiry ?? ""];
           const backChain = backExpiry && backExpiry !== frontExpiry ? await marketData.getChain(ticker, backExpiry, backTs) : null;
 
-          // ATM IV — robust median-based
-          const atmIvFront = frontChain ? atmIv([...frontChain.calls, ...frontChain.puts], spot) : null;
-          const atmIvBack = backChain ? atmIv([...backChain.calls, ...backChain.puts], spot) : null;
+          // Assemble front opts and build validator
+          const allFrontOpts = frontChain ? [...frontChain.calls, ...frontChain.puts] : [];
+          const isValidOpt = makeValidator(allFrontOpts, spot);
+
+          // ATM IV — robust median-based with validator
+          const atmIvFront = frontChain ? atmIvCalc(allFrontOpts, spot, isValidOpt) : null;
+          const allBackOpts = backChain ? [...backChain.calls, ...backChain.puts] : [];
+          const isValidOptBack = allBackOpts.length > 0 ? makeValidator(allBackOpts, spot) : isValidOpt;
+          const atmIvBack = backChain ? atmIvCalc(allBackOpts, spot, isValidOptBack) : null;
 
           // VRP = ATM IV - HV20
           const vrp = atmIvFront !== null && hv20 !== null ? atmIvFront / 100 - hv20 : null;
@@ -571,14 +584,13 @@ export const signallabRouter = router({
             : null;
 
           // GEX — liquidity gate
-          const allFrontOpts = [...(frontChain?.calls ?? []), ...(frontChain?.puts ?? [])];
           const liquid = allFrontOpts.filter(o => o.oi > 0);
           let gex: Awaited<ReturnType<typeof computeGexProfile>> | null = null;
           let gexSkipReason: string | null = null;
           if (liquid.length < 10 || liquid.reduce((s, o) => s + o.oi, 0) < 500) {
             gexSkipReason = "Opsiyon likiditesi yetersiz (OI verisi az)";
           } else {
-            const gexContracts = allFrontOpts.map((o) => ({
+            const gexContracts = allFrontOpts.filter(o => isValidOpt(o) || o.oi > 0).map((o) => ({
               strike: o.strike,
               type: (frontChain?.calls ?? []).includes(o) ? "call" as const : "put" as const,
               openInterest: o.oi,
@@ -594,8 +606,10 @@ export const signallabRouter = router({
             gexLevels = windowed.length >= 8 ? windowed : [...gex.levels].sort((a, b) => Math.abs(a.strike - spot) - Math.abs(b.strike - spot)).slice(0, 20).sort((a, b) => a.strike - b.strike);
           }
 
-          // Fire-and-forget vol snapshot upsert
-          try { void db.volSnapshot.upsert({ where: { ticker_date: { ticker: ticker.toUpperCase(), date: new Date(new Date().toISOString().slice(0, 10)) } }, create: { ticker: ticker.toUpperCase(), date: new Date(new Date().toISOString().slice(0, 10)), atmIv: atmIvFront ?? 0, hv20 }, update: { atmIv: atmIvFront ?? 0, hv20 } }); } catch {}
+          // Fire-and-forget vol snapshot upsert — skip when no IV data
+          if (atmIvFront !== null) {
+            try { void db.volSnapshot.upsert({ where: { ticker_date: { ticker: ticker.toUpperCase(), date: new Date(new Date().toISOString().slice(0, 10)) } }, create: { ticker: ticker.toUpperCase(), date: new Date(new Date().toISOString().slice(0, 10)), atmIv: atmIvFront, hv20 }, update: { atmIv: atmIvFront, hv20 } }); } catch {}
+          }
 
           // IV percentile
           const ivData = await yahoo.fetchIVRank(ticker).catch(() => ({ ivRank: 50, currentIV: 25 }));
@@ -613,8 +627,23 @@ export const signallabRouter = router({
             }
           } catch {}
 
-          // Sell gate
-          const gate = sellGate({ vrp, termContango, earningsInWindow, ivPercentile: ivData.ivRank });
+          // Sell gate — neutral when no IV data
+          const gate = atmIvFront === null
+            ? { color: "neutral" as const, label: "VERİ YOK", reasons: ["IV verisi alınamadı — piyasa kapalı olabilir veya zincir verisi eksik"] }
+            : sellGate({ vrp, termContango, earningsInWindow, ivPercentile: ivData.ivRank });
+
+          // Diagnostics
+          const diag = frontChain ? {
+            expiry: frontExpiry,
+            contracts: allFrontOpts.length,
+            withOi: allFrontOpts.filter(o => o.oi > 0).length,
+            oiSum: allFrontOpts.reduce((s, o) => s + o.oi, 0),
+            withBid: allFrontOpts.filter(o => o.bid > 0).length,
+            sample: [...allFrontOpts]
+              .sort((a, b) => Math.abs(a.strike - spot) - Math.abs(b.strike - spot))
+              .slice(0, 3)
+              .map(o => ({ strike: o.strike, bid: o.bid, ask: o.ask, iv: Number(o.iv.toFixed(1)), oi: o.oi, last: o.last })),
+          } : null;
 
           return {
             ticker, spot, hv20, hv60, atmIvFront, atmIvBack, vrp, termContango, skew25,
@@ -623,10 +652,11 @@ export const signallabRouter = router({
             ivPercentile: ivData.ivRank,
             earningsInWindow,
             gate,
+            diag,
             error: null,
           };
         } catch (err) {
-          return { ticker, spot: 0, hv20: null, hv60: null, atmIvFront: null, atmIvBack: null, vrp: null, termContango: null, skew25: null, gex: null, gexSkipReason: null as string | null, ivPercentile: null, earningsInWindow: null, gate: null, error: err instanceof Error ? err.message : "Hata" };
+          return { ticker, spot: 0, hv20: null, hv60: null, atmIvFront: null, atmIvBack: null, vrp: null, termContango: null, skew25: null, gex: null, gexSkipReason: null as string | null, ivPercentile: null, earningsInWindow: null, gate: null, diag: null, error: err instanceof Error ? err.message : "Hata" };
         }
       }));
 

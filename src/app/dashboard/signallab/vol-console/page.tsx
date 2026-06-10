@@ -17,6 +17,7 @@ function GateBadge({ gate }: { gate: GateVerdict }) {
     green: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
     yellow: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
     red: "bg-red-500/15 text-red-400 border-red-500/30",
+    neutral: "bg-white/10 text-white/70 border border-white/20",
   };
   return (
     <span className={cn("rounded-md border px-2.5 py-1 text-xs font-bold", colors[gate.color])}>
@@ -123,11 +124,11 @@ export default function VolConsolePage() {
                   <span className="text-white/90">Skew25 <span className="text-white">{r.skew25 !== null ? r.skew25.toFixed(1) : "—"}</span></span>
                   <span className="text-white/90">IV%ile <span className="text-white">{r.ivPercentile !== null ? r.ivPercentile.toFixed(0) : "—"}</span></span>
                   {r.atmIvFront === null ? (
-                    <span className="rounded-md bg-white/10 px-2.5 py-1 text-xs font-bold text-white/70">VERİ YOK</span>
+                    <span className="rounded-md bg-white/10 px-2.5 py-1 text-xs font-bold text-white/70 border border-white/20">VERİ YOK</span>
                   ) : r.gate && (
                     <>
                       <GateBadge gate={r.gate} />
-                      <DetayButton content={gateDetail({ ticker: r.ticker, verdict: r.gate, vrp: r.vrp, atmIvFront: r.atmIvFront, hv20: r.hv20, termContango: r.termContango, ivPercentile: r.ivPercentile, earningsInWindow: r.earningsInWindow })} />
+                      {r.gate.color !== "neutral" && <DetayButton content={gateDetail({ ticker: r.ticker, verdict: r.gate, vrp: r.vrp, atmIvFront: r.atmIvFront, hv20: r.hv20, termContango: r.termContango, ivPercentile: r.ivPercentile, earningsInWindow: r.earningsInWindow })} />}
                     </>
                   )}
                 </div>
@@ -172,6 +173,7 @@ export default function VolConsolePage() {
               )}
 
               {/* Bottom: gate reasons + CSP bridge */}
+              {r.gate && r.gate.color !== "neutral" && (
               <div className="flex items-center justify-between border-t border-white/[0.06] px-5 py-2.5">
                 <div className="flex items-center gap-2 text-xs font-bold text-white/90">
                   {r.gate?.reasons.map((reason, i) => <span key={i} className="mr-3">{reason}</span>)}
@@ -183,6 +185,15 @@ export default function VolConsolePage() {
                   </a>
                 )}
               </div>
+              )}
+
+              {/* Diagnostics */}
+              {r.diag && (
+                <details className="mt-2">
+                  <summary className="text-xs font-bold text-white/50 cursor-pointer px-5 py-1">Tanı</summary>
+                  <pre className="mt-1 text-xs font-bold text-white/70 font-mono overflow-x-auto px-5 pb-2">{JSON.stringify(r.diag, null, 2)}</pre>
+                </details>
+              )}
             </div>
           ))}
 

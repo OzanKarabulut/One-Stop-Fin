@@ -1,4 +1,4 @@
-export type GateColor = "green" | "yellow" | "red";
+export type GateColor = "green" | "yellow" | "red" | "neutral";
 export interface GateInput {
   vrp: number | null;
   termContango: boolean | null;
