@@ -121,3 +121,23 @@ model VolSnapshot {
   @@unique([ticker, date])
   @@index([ticker])
 }
+
+model PredictionLog {
+  id            Int      @id @default(autoincrement())
+  ticker        String
+  targetDate    DateTime
+  madeOn        DateTime @default(now())
+  madeOnDay     DateTime
+  spot          Float
+  sigmaUp       Float
+  sigmaDown     Float
+  tYears        Float
+  median        Float
+  skewComponent Float
+  pinComponent  Float
+  pointPrice    Float
+  realized      Float?
+  zScore        Float?
+  @@unique([ticker, targetDate, madeOnDay])
+  @@index([ticker])
+}

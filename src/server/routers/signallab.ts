@@ -14,6 +14,8 @@ import { getCboeChain } from "../services/market-data/cboe";
 import { db } from "@/lib/db";
 import type { GexContractInput } from "@/lib/gex";
 import { expectedPnl, probProfit, pnlExtremes, type Leg, type RWParams } from "@/lib/real-world-pricing";
+import { SkewedDist, quantile, probBelow, probAbove, skewShift, pinGravity, pointForecast, ladderLevels, type PinCandidate, type PointForecast } from "@/lib/forecast-math";
+import { generateMarketEvents } from "@/lib/market-calendar";
 
 // ─── CSP Screener Constants ──────────────────────────────────────────────────
 
@@ -849,5 +851,194 @@ export const signallabRouter = router({
       }));
 
       return { results, capped, originalCount };
+    }),
+
+  // Forecast Center
+  forecast: publicProcedure
+    .input(z.object({ ticker: z.string(), targetDate: z.string() }))
+    .query(async ({ input }) => {
+      const ticker = input.ticker.toUpperCase();
+      const targetDate = input.targetDate;
+      const today = new Date();
+      const todayStr = today.toISOString().slice(0, 10);
+      const madeOnDay = new Date(todayStr + "T00:00:00Z");
+      const targetMs = new Date(targetDate + "T00:00:00Z").getTime();
+      const daysTo = Math.max(Math.ceil((targetMs - Date.now()) / 86400000), 1);
+      const T = daysTo / 365;
+
+      // 1. Spot + closes
+      const chartUrl = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=3mo`;
+      const chartJson = (await yahoo.fetchJSON(chartUrl)) as {
+        chart?: { result?: Array<{ meta?: { regularMarketPrice?: number }; indicators?: { quote?: Array<{ close?: (number | null)[] }> } }> };
+      };
+      const spot = chartJson?.chart?.result?.[0]?.meta?.regularMarketPrice ?? 0;
+      if (spot <= 0) throw new Error("Spot fiyat alınamadı");
+
+      // 2. Option chain closest to targetDate
+      const expiryInfo = await marketData.getExpirations(ticker);
+      const matchedExpiry = findBestExpiry(expiryInfo.expirations, targetDate, 7);
+      if (!matchedExpiry) throw new Error("Uygun vade bulunamadı");
+      const ts = expiryInfo.expirationTimestamps[matchedExpiry];
+      const chain = await marketData.getChain(ticker, matchedExpiry, ts);
+      const chainT = Math.max(chain.dte, 1) / 365;
+
+      // 3. ATM IV + sigmaUp/sigmaDown via bisection
+      const solveIv = (o: { strike: number; last: number; iv: number }, isCall: boolean): number | null => {
+        if (o.last > 0 && chainT > 0) {
+          const bs = impliedVolBisection(o.last, spot, o.strike, chainT, 0.045, isCall);
+          if (bs !== null && bs > 0.03 && bs < 5) return bs;
+        }
+        return o.iv > 3 ? o.iv / 100 : null;
+      };
+
+      const atmIvs: number[] = [];
+      for (const c of chain.calls) if (Math.abs(c.strike - spot) <= spot * 0.05) { const v = solveIv(c, true); if (v) atmIvs.push(v); }
+      for (const p of chain.puts) if (Math.abs(p.strike - spot) <= spot * 0.05) { const v = solveIv(p, false); if (v) atmIvs.push(v); }
+      const atmIv = atmIvs.length > 0 ? atmIvs.sort((a, b) => a - b)[Math.floor(atmIvs.length / 2)] : 0.30;
+
+      // sigmaUp: avg IV of calls 3-12% above spot
+      const upIvs: number[] = [];
+      for (const c of chain.calls) {
+        const m = (c.strike - spot) / spot;
+        if (m >= 0.03 && m <= 0.12) { const v = solveIv(c, true); if (v) upIvs.push(v); }
+      }
+      const sigmaUp = upIvs.length > 0 ? upIvs.reduce((a, b) => a + b, 0) / upIvs.length : atmIv;
+
+      // sigmaDown: avg IV of puts 3-12% below spot
+      const downIvs: number[] = [];
+      for (const p of chain.puts) {
+        const m = (spot - p.strike) / spot;
+        if (m >= 0.03 && m <= 0.12) { const v = solveIv(p, false); if (v) downIvs.push(v); }
+      }
+      const sigmaDown = downIvs.length > 0 ? downIvs.reduce((a, b) => a + b, 0) / downIvs.length : atmIv;
+
+      // 4. GEX + pin candidates
+      const { computeGexProfile } = await import("@/lib/gex");
+      let gexResult = { putWall: null as number | null, callWall: null as number | null, flip: null as number | null };
+      let pinCandidates: PinCandidate[] = [];
+      try {
+        const cboe = await getCboeChain(ticker);
+        if (cboe) {
+          const cboeExpiries = [...new Set(cboe.options.map(o => o.expiry))];
+          const bestExp = cboeExpiries.reduce((best, exp) => {
+            const diff = Math.abs(new Date(exp + "T00:00:00Z").getTime() - targetMs);
+            const bestDiff = Math.abs(new Date(best + "T00:00:00Z").getTime() - targetMs);
+            return diff < bestDiff ? exp : best;
+          }, cboeExpiries[0] ?? "");
+          if (bestExp) {
+            const expiryOpts = cboe.options.filter(o => o.expiry === bestExp && o.oi > 0);
+            if (expiryOpts.length >= 10) {
+              const gexContracts = expiryOpts.map(o => ({
+                strike: o.strike, type: o.type, openInterest: o.oi,
+                iv: (o.iv > 0.03 && o.iv < 5) ? o.iv : atmIv,
+              }));
+              const gex = computeGexProfile(spot, chainT, gexContracts);
+              gexResult = { putWall: gex.putWall, callWall: gex.callWall, flip: gex.flip };
+              // Pin candidates: 3 strikes with largest |netGex| within ±7% of spot
+              const nearby = gex.levels.filter(l => Math.abs(l.strike - spot) / spot <= 0.07);
+              const sorted = [...nearby].sort((a, b) => Math.abs(b.netGex) - Math.abs(a.netGex)).slice(0, 3);
+              const totalGex = sorted.reduce((s, l) => s + Math.abs(l.netGex), 0);
+              pinCandidates = sorted.map(l => ({ strike: l.strike, gammaShare: totalGex > 0 ? Math.abs(l.netGex) / totalGex : 0 }));
+            }
+          }
+        }
+      } catch {}
+
+      // 5. Events
+      const allEvents = generateMarketEvents(2026);
+      const events = allEvents.filter(e => e.date >= todayStr && e.date <= targetDate);
+
+      // 6. Build distribution + cone + quantiles + ladder + point forecast
+      const isExpiryDay = matchedExpiry === targetDate;
+      const dist: SkewedDist = { S: spot, sigmaUp, sigmaDown, T };
+      const pin = pinGravity(spot, daysTo, isExpiryDay, pinCandidates);
+      const point = pointForecast(dist, pin);
+
+      // Daily cone (weekdays from tomorrow to targetDate)
+      const cone: Array<{ date: string; lower: number; upper: number; median: number }> = [];
+      const cur = new Date(todayStr + "T00:00:00Z");
+      cur.setUTCDate(cur.getUTCDate() + 1);
+      while (cur.getTime() <= targetMs) {
+        const dow = cur.getUTCDay();
+        if (dow !== 0 && dow !== 6) {
+          const partialDays = Math.ceil((cur.getTime() - Date.now()) / 86400000);
+          const partialT = Math.max(partialDays, 1) / 365;
+          const partialDist: SkewedDist = { S: spot, sigmaUp, sigmaDown, T: partialT };
+          cone.push({
+            date: cur.toISOString().slice(0, 10),
+            lower: quantile(0.16, partialDist),
+            upper: quantile(0.84, partialDist),
+            median: quantile(0.5, partialDist),
+          });
+        }
+        cur.setUTCDate(cur.getUTCDate() + 1);
+      }
+
+      // Quantiles
+      const quantiles = { p10: quantile(0.10, dist), p25: quantile(0.25, dist), p50: quantile(0.50, dist), p75: quantile(0.75, dist), p90: quantile(0.90, dist) };
+
+      // Ladder
+      const levels = ladderLevels(dist, gexResult.putWall, gexResult.callWall);
+      const ladder = levels.map(strike => ({
+        strike,
+        probBelow: probBelow(strike, dist),
+        probAbove: probAbove(strike, dist),
+        isWall: strike === gexResult.putWall || strike === gexResult.callWall,
+        wallType: strike === gexResult.putWall ? "put" as const : strike === gexResult.callWall ? "call" as const : null,
+      }));
+
+      // 7. Upsert PredictionLog (fire-and-forget — never break forecast response)
+      let calibration = { count: 0, meanZ: 0, stdZ: 0, meanAbsZ: 0 };
+      try {
+        await db.predictionLog.upsert({
+          where: { ticker_targetDate_madeOnDay: { ticker, targetDate: new Date(targetDate + "T00:00:00Z"), madeOnDay } },
+          create: { ticker, targetDate: new Date(targetDate + "T00:00:00Z"), madeOnDay, spot, sigmaUp, sigmaDown, tYears: T, median: point.median, skewComponent: point.skewComponent, pinComponent: point.pinComponent, pointPrice: point.price },
+          update: { spot, sigmaUp, sigmaDown, tYears: T, median: point.median, skewComponent: point.skewComponent, pinComponent: point.pinComponent, pointPrice: point.price },
+        });
+
+        // 8. Settle past predictions
+        const unsettled = await db.predictionLog.findMany({ where: { ticker, realized: null, targetDate: { lt: madeOnDay } } });
+        for (const row of unsettled) {
+          try {
+            const url = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=5d&period1=${Math.floor(row.targetDate.getTime() / 1000 - 86400)}&period2=${Math.floor(row.targetDate.getTime() / 1000 + 86400 * 3)}`;
+            const json = (await yahoo.fetchJSON(url)) as { chart?: { result?: Array<{ timestamp?: number[]; indicators?: { quote?: Array<{ close?: (number | null)[] }> } }> } };
+            const timestamps = json?.chart?.result?.[0]?.timestamp ?? [];
+            const closes = json?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? [];
+            const tgt = row.targetDate.getTime() / 1000;
+            let realized: number | null = null;
+            for (let i = 0; i < timestamps.length; i++) {
+              if (timestamps[i] >= tgt && closes[i] != null) { realized = closes[i]!; break; }
+            }
+            if (realized !== null) {
+              const sigma = realized > row.spot ? row.sigmaUp : row.sigmaDown;
+              const zScore = Math.log(realized / row.spot) / (sigma * Math.sqrt(row.tYears));
+              await db.predictionLog.update({ where: { id: row.id }, data: { realized, zScore } });
+            }
+          } catch { /* skip individual settle failures */ }
+        }
+
+        // 9. Calibration stats
+        const settled = await db.predictionLog.findMany({ where: { ticker, realized: { not: null }, zScore: { not: null } } });
+        if (settled.length > 0) {
+          const zs = settled.map(r => r.zScore!);
+          const meanZ = zs.reduce((a, b) => a + b, 0) / zs.length;
+          const stdZ = Math.sqrt(zs.map(z => (z - meanZ) ** 2).reduce((a, b) => a + b, 0) / zs.length);
+          const meanAbsZ = zs.map(z => Math.abs(z)).reduce((a, b) => a + b, 0) / zs.length;
+          calibration = { count: settled.length, meanZ, stdZ, meanAbsZ };
+        }
+      } catch (e) {
+        console.warn("[forecast] DB write/settle failed:", e instanceof Error ? e.message : e);
+      }
+
+      return {
+        ticker, spot, targetDate,
+        dist: { sigmaUp, sigmaDown, T },
+        cone, quantiles, ladder,
+        gex: gexResult,
+        point,
+        events,
+        calibration,
+        pinCandidates,
+      };
     }),
 });

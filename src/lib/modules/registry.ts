@@ -12,6 +12,7 @@ import {
   PenTool,
   Globe,
   Eye,
+  Crosshair,
   type LucideIcon,
 } from "lucide-react";
 
@@ -39,6 +40,7 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
       { href: "/dashboard/signallab/csp-screener", labelKey: "modules.signallab.csp", icon: Shield },
       { href: "/dashboard/signallab/ai-strategy", labelKey: "modules.signallab.aiStrategy", icon: Brain },
       { href: "/dashboard/signallab/vol-console", labelKey: "modules.signallab.volConsole", icon: Activity },
+      { href: "/dashboard/signallab/forecast-center", labelKey: "modules.signallab.forecast", icon: Crosshair },
       { href: "/dashboard/signallab/command-center", labelKey: "modules.signallab.commandCenter", icon: Target },
       { href: "/dashboard/signallab/manual", labelKey: "modules.signallab.manual", icon: PenTool },
       { href: "/dashboard/signallab/market-overview", labelKey: "modules.signallab.market", icon: Globe },
