@@ -8,10 +8,12 @@ import * as yahoo from "../services/yahoo-finance";
 import * as math from "../services/math-engine";
 import { impliedVolBisection } from "../services/black-scholes";
 import { scoreCSPContract, type IVBucket } from "../services/csp-scoring";
+import { earningsInWindow } from "../services/earnings";
 import { marketData } from "../services/market-data";
 import { getCboeChain } from "../services/market-data/cboe";
 import { db } from "@/lib/db";
 import type { GexContractInput } from "@/lib/gex";
+import { expectedPnl, probProfit, pnlExtremes, type Leg, type RWParams } from "@/lib/real-world-pricing";
 
 // ─── CSP Screener Constants ──────────────────────────────────────────────────
 
@@ -31,6 +33,8 @@ interface CSPContract {
   bid: number;
   ask: number;
   mid: number;
+  priceQuality: "live" | "last";
+  hasEarnings: boolean;
   iv: number | null;
   ivSource: string;
   ivClass: number;
@@ -153,6 +157,7 @@ async function fetchCSPTicker(
     const maxAboveATM = 5;
 
     for (const put of chain.puts) {
+      // Pre-filter order: strike range → last price → then BS IV (cheap-first)
       const strike = put.strike;
       if (!strike || strike < low || strike > high) continue;
       inRange++;
@@ -161,7 +166,13 @@ async function fetchCSPTicker(
       const ask = put.ask;
       const last = put.last;
       if (last <= 0) continue;
-      const mid = last;
+      let mid = last;
+      let priceQuality: "live" | "last" = "last";
+      if (bid > 0 && ask > 0 && ask >= bid) {
+        mid = Math.min(Math.max(last, bid), ask);
+        priceQuality = "live";
+      }
+      if (mid <= 0) continue;
       hasMid++;
 
       const oi = put.oi;
@@ -194,7 +205,8 @@ async function fetchCSPTicker(
 
       contracts.push({
         ticker, spot, strike, expiry: matchedExpiry, dte,
-        bid, ask, mid, iv, ivSource, ivClass: cspClassify(iv),
+        bid, ask, mid, priceQuality, hasEarnings: false,
+        iv, ivSource, ivClass: cspClassify(iv),
         collateral, premium, yieldPct, annYield,
         moneyness, breakeven, discount, volume, oi: oiValue,
         ...scoring,
@@ -240,6 +252,14 @@ export const signallabRouter = router({
       const settled = await Promise.all(tickers.map(async (t) => {
         try {
           const result = await fetchCSPTicker(t, input.expiry, input.minOI);
+          // Earnings check — once per ticker
+          const hasErn = await earningsInWindow(t, input.expiry);
+          if (hasErn === true) {
+            for (const c of result.contracts) {
+              c.cspScore = Math.round(c.cspScore * 0.75);
+              c.hasEarnings = true;
+            }
+          }
           return { contracts: result.contracts, diag: result.diag };
         } catch {
           return {
@@ -261,22 +281,60 @@ export const signallabRouter = router({
         grouped.set(c.ticker, arr);
       }
 
-      const groups = Array.from(grouped.entries()).map(([tk, items]) => {
+      const { computeGexProfile } = await import("@/lib/gex");
+
+      const groups = await Promise.all(Array.from(grouped.entries()).map(async ([tk, items]) => {
         const sorted = [...items].sort((a, b) => b.yieldPct - a.yieldPct);
         const ivs = sorted.map((s) => s.iv).filter((v): v is number => v !== null);
         const atmItem = sorted.reduce((best, cur) => Math.abs(cur.moneyness) < Math.abs(best.moneyness) ? cur : best, sorted[0]);
+        const expiry = sorted[0]?.expiry ?? "";
+        const spot = sorted[0]?.spot ?? 0;
+
+        // Put Wall from CBOE
+        let putWall: number | null = null;
+        try {
+          const cboe = await getCboeChain(tk);
+          if (cboe && expiry) {
+            const cboeExpiries = [...new Set(cboe.options.map(o => o.expiry))];
+            const targetMs = new Date(expiry + "T00:00:00Z").getTime();
+            const bestExp = cboeExpiries.reduce((best, exp) => {
+              const diff = Math.abs(new Date(exp + "T00:00:00Z").getTime() - targetMs);
+              const bestDiff = Math.abs(new Date(best + "T00:00:00Z").getTime() - targetMs);
+              return diff < bestDiff ? exp : best;
+            }, cboeExpiries[0] ?? "");
+            if (bestExp) {
+              const expiryOpts = cboe.options.filter(o => o.expiry === bestExp && o.oi > 0);
+              const oiSum = expiryOpts.reduce((s, o) => s + o.oi, 0);
+              if (expiryOpts.length >= 10 && oiSum >= 500) {
+                const T = Math.max((sorted[0]?.dte ?? 30), 1) / 365;
+                const gexSpot = spot > 0 ? spot : cboe.spot;
+                const atmIv = ivs.length > 0 ? (ivs.reduce((a, b) => a + b, 0) / ivs.length) / 100 : 0.30;
+                const gexContracts: GexContractInput[] = expiryOpts.map(o => ({
+                  strike: o.strike,
+                  type: o.type,
+                  openInterest: o.oi,
+                  iv: (o.iv > 0.03 && o.iv < 5) ? o.iv : atmIv,
+                }));
+                const gex = computeGexProfile(gexSpot, T, gexContracts);
+                putWall = gex.putWall;
+              }
+            }
+          }
+        } catch {}
+
         return {
           ticker: tk,
-          spot: sorted[0]?.spot ?? 0,
-          expiry: sorted[0]?.expiry ?? "",
+          spot,
+          expiry,
           dte: sorted[0]?.dte ?? 0,
           strikes: sorted,
           maxIV: ivs.length > 0 ? Math.max(...ivs) : null,
           atmIV: atmItem?.iv ?? null,
           maxYield: sorted[0]?.yieldPct ?? 0,
           bestClass: Math.min(...sorted.map((s) => s.ivClass)),
+          putWall,
         };
-      });
+      }));
 
       const classDist = { 1: 0, 2: 0, 3: 0, 4: 0 };
       for (const c of allContracts) classDist[c.ivClass as 1|2|3|4]++;
@@ -374,7 +432,7 @@ export const signallabRouter = router({
       return marketData.getChain(input.ticker, input.expiry, input.expiryTimestamp);
     }),
 
-  // AI Strategy Scan — multi-ticker strategy finder
+  // AI Strategy Scan — multi-ticker strategy finder (real-world pricing)
   aiStrategyScan: publicProcedure
     .input(z.object({
       watchlist: z.enum(["all", "ozan", "custom"]).default("all"),
@@ -391,50 +449,143 @@ export const signallabRouter = router({
       }
       const tickers = tickerStr.split(",").map((t) => t.trim().toUpperCase()).filter(Boolean);
 
+      const solveIvPct = (o: { strike: number; last: number; iv: number }, spot: number, T: number, isCall: boolean): number | null => {
+        if (o.last > 0 && T > 0) {
+          const bs = impliedVolBisection(o.last, spot, o.strike, T, CSP_RISK_FREE_RATE, isCall);
+          if (bs !== null && bs > 0.03 && bs < 5) return bs * 100;
+        }
+        if (o.iv > 3 && o.iv < 500) return o.iv;
+        return null;
+      };
+      const median = (xs: number[]): number | null => {
+        if (xs.length === 0) return null;
+        const s = [...xs].sort((a, b) => a - b);
+        const m = Math.floor(s.length / 2);
+        return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+      };
+
       const results = await Promise.all(tickers.map(async (ticker) => {
         try {
-          const expDate = new Date(input.expiry + "T00:00:00Z");
-          const dte = Math.max(Math.ceil((expDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)), 0);
+          const quote = await yahoo.fetchQuote(ticker);
+          const spot = quote.price;
 
-          const [quote, hv, ivData] = await Promise.all([
-            yahoo.fetchQuote(ticker),
-            yahoo.fetchHV(ticker).catch(() => 0.25),
-            yahoo.fetchIVRank(ticker).catch(() => ({ ivRank: 50, currentIV: 25 })),
-          ]);
+          const hv20Raw = await yahoo.fetchHV(ticker, 20).catch(() => null);
+          const hv60Raw = await yahoo.fetchHV(ticker, 60).catch(() => null);
+          const hv20 = typeof hv20Raw === "number" ? hv20Raw : null;
+          const hv60 = typeof hv60Raw === "number" ? hv60Raw : null;
+          let sigmaReal = hv20 !== null && hv60 !== null ? 0.6 * hv20 + 0.4 * hv60
+            : hv20 ?? hv60;
+          if (sigmaReal === null) return { ticker, price: spot, buckets: { bullish: [] as never[], neutral: [] as never[], bearish: [] as never[] }, debugReason: "HV verisi yok" };
+          sigmaReal = Math.min(Math.max(sigmaReal, 0.10), 3.0);
 
-          let chain: yahoo.OptionChain;
-          try {
-            const expiryInfo = await marketData.getExpirations(ticker);
-            const matchedExpiry = findBestExpiry(expiryInfo.expirations, input.expiry);
-            if (!matchedExpiry) return { ticker, price: quote.price, strategies: [], signals: {} as never, debugReason: "Vade bulunamadı" };
-            const ts = expiryInfo.expirationTimestamps[matchedExpiry];
-            chain = await marketData.getChain(ticker, matchedExpiry, ts) as unknown as yahoo.OptionChain;
-          } catch {
-            chain = { ticker, price: quote.price, expiry: input.expiry, dte, calls: [], puts: [] };
+          const expiryInfo = await marketData.getExpirations(ticker);
+          const matchedExpiry = findBestExpiry(expiryInfo.expirations, input.expiry);
+          if (!matchedExpiry) return { ticker, price: spot, buckets: { bullish: [] as never[], neutral: [] as never[], bearish: [] as never[] }, debugReason: "Vade bulunamadı" };
+          const ts = expiryInfo.expirationTimestamps[matchedExpiry];
+          const chain = await marketData.getChain(ticker, matchedExpiry, ts);
+          const dte = chain.dte;
+          const T = Math.max(dte, 1) / 365;
+
+          // ATM IV
+          let atmIv: number | null = null;
+          for (const band of [0.05, 0.12]) {
+            const ivs: number[] = [];
+            for (const c of chain.calls) if (Math.abs(c.strike - spot) <= spot * band) { const v = solveIvPct(c, spot, T, true); if (v !== null) ivs.push(v); }
+            for (const p of chain.puts) if (Math.abs(p.strike - spot) <= spot * band) { const v = solveIvPct(p, spot, T, false); if (v !== null) ivs.push(v); }
+            const m = median(ivs);
+            if (m !== null && ivs.length >= 2) { atmIv = m; break; }
           }
+          const vrp = atmIv !== null && hv20 !== null ? atmIv / 100 - hv20 : null;
 
-          const pick = math.buildAIPick(ticker, quote.price, input.expiry, dte, chain, hv, ivData.ivRank, ivData.currentIV);
-          return { ticker, price: pick.price, strategies: pick.strategies, signals: pick.signals, debugReason: pick.debugInfo.reason };
+          const priceOpt = (o: { last: number; bid: number; ask: number }) => {
+            let p = o.last;
+            if (o.bid > 0 && o.ask > 0 && o.ask >= o.bid) p = Math.min(Math.max(o.last, o.bid), o.ask);
+            return p;
+          };
+          const validCalls = chain.calls.filter(c => c.last > 0).sort((a, b) => a.strike - b.strike);
+          const validPuts = chain.puts.filter(p => p.last > 0).sort((a, b) => b.strike - a.strike);
+
+          if (validCalls.length === 0 || validPuts.length === 0) return { ticker, price: spot, buckets: { bullish: [] as never[], neutral: [] as never[], bearish: [] as never[] }, debugReason: "Likit opsiyon yok" };
+
+          const atmCall = validCalls.reduce((best, c) => Math.abs(c.strike - spot) < Math.abs(best.strike - spot) ? c : best, validCalls[0]);
+          const atmPut = validPuts.reduce((best, p) => Math.abs(p.strike - spot) < Math.abs(best.strike - spot) ? p : best, validPuts[0]);
+          const otmCall = validCalls.find(c => c.strike >= spot * 1.03) ?? atmCall;
+          const otmPut = validPuts.find(p => p.strike <= spot * 0.97) ?? atmPut;
+          const deepOtmPut = validPuts.find(p => p.strike <= spot * 0.93) ?? otmPut;
+
+          const rwp: RWParams = { S0: spot, sigma: sigmaReal, T };
+
+          const strategies: Array<{ name: string; bucket: "bullish" | "neutral" | "bearish"; desc: string; legs: Leg[] }> = [
+            { name: "Long Call", bucket: "bullish", desc: "Yükseliş beklentisi — call al", legs: [{ kind: "call", qty: 100, strike: otmCall.strike, price: priceOpt(otmCall) }] },
+            { name: "Long Put", bucket: "bearish", desc: "Düşüş beklentisi — put al", legs: [{ kind: "put", qty: 100, strike: otmPut.strike, price: priceOpt(otmPut) }] },
+            { name: "Covered Call", bucket: "neutral", desc: "Hisse + call sat — theta geliri", legs: [{ kind: "stock", qty: 100, price: spot }, { kind: "call", qty: -100, strike: otmCall.strike, price: priceOpt(otmCall) }] },
+            { name: "Cash-Secured Put", bucket: "bullish", desc: "OTM put sat — prim topla", legs: [{ kind: "put", qty: -100, strike: otmPut.strike, price: priceOpt(otmPut) }] },
+            { name: "Wheel", bucket: "bullish", desc: "CSP → CC döngüsü — sürekli gelir", legs: [{ kind: "put", qty: -100, strike: otmPut.strike, price: priceOpt(otmPut) }] },
+            { name: "Collar", bucket: "neutral", desc: "Hisse + call sat + put al — sınırlı risk", legs: [{ kind: "stock", qty: 100, price: spot }, { kind: "call", qty: -100, strike: otmCall.strike, price: priceOpt(otmCall) }, { kind: "put", qty: 100, strike: deepOtmPut.strike, price: priceOpt(deepOtmPut) }] },
+            { name: "Covered Strangle", bucket: "neutral", desc: "Hisse + call sat + put sat — max theta", legs: [{ kind: "stock", qty: 100, price: spot }, { kind: "call", qty: -100, strike: otmCall.strike, price: priceOpt(otmCall) }, { kind: "put", qty: -100, strike: otmPut.strike, price: priceOpt(otmPut) }] },
+          ];
+
+          const scored = strategies.map(s => {
+            const ev = expectedPnl(s.legs, rwp);
+            const pWin = probProfit(s.legs, rwp);
+            const { maxLoss, maxGain } = pnlExtremes(s.legs);
+            const rawKelly = maxGain > 0 && maxLoss < 0 ? pWin - (1 - pWin) / (maxGain / Math.abs(maxLoss)) : 0;
+            const kellyPct = Math.min(Math.max(rawKelly, 0), 1) * 25;
+
+            const isShortPrem = ["Cash-Secured Put", "Wheel", "Covered Call", "Covered Strangle", "Collar"].includes(s.name);
+            const evRatio = maxLoss !== 0 && isFinite(maxLoss) ? Math.min(Math.max(ev / Math.abs(maxLoss), -1), 1) : 0;
+            const evScore = (evRatio + 1) / 2 * 40;
+            const pWinScore = pWin * 30;
+            const vrpVal = vrp ?? 0;
+            const vrpScore = isShortPrem ? Math.min(Math.max(vrpVal / 0.05, -1), 1) * 7.5 + 7.5 : Math.min(Math.max(-vrpVal / 0.05, -1), 1) * 7.5 + 7.5;
+            const priceQ = 15;
+            const compositeScore = Math.min(Math.max(evScore + pWinScore + vrpScore + priceQ, 0), 100);
+
+            const netCredit = s.legs.reduce((sum, l) => sum + (l.qty < 0 ? -l.qty * l.price : -l.qty * l.price), 0);
+
+            const edgeLabel = isShortPrem
+              ? (vrp !== null && vrp > 0 ? `Edge: VRP +${(vrp * 100).toFixed(1)} puan (IV ${atmIv?.toFixed(0) ?? "?"}% > HV ${hv20 !== null ? (hv20 * 100).toFixed(0) : "?"}%)` : `Edge yok: VRP negatif`)
+              : (vrp !== null && vrp < 0 ? `Edge: VRP −${(-vrp * 100).toFixed(1)} puan (IV < HV — al tarafı avantajlı)` : `Edge yok: VRP pozitif — prim satıcısı favori`);
+
+            return {
+              ticker, tickerPrice: spot, name: s.name, type: s.bucket, description: s.desc,
+              legs: s.legs.map(l => ({ action: (l.qty > 0 ? "buy" : "sell") as "buy" | "sell", type: l.kind, strike: l.strike ?? 0, price: l.price, contracts: Math.abs(l.qty) })),
+              compositeScore: Math.round(compositeScore),
+              probability: pWin * 100, maxProfit: maxGain, maxLoss, ev, evPct: maxLoss !== 0 && isFinite(maxLoss) ? ev / Math.abs(maxLoss) * 100 : 0,
+              kellyPct, vrp, atmIv, hv20, sigmaUsed: sigmaReal, priceQuality: "live" as const,
+              netCredit, why: edgeLabel,
+              signals: { ivRankOk: (vrp ?? 0) > 0, trendOk: true, dteOk: dte >= 7 && dte <= 90, earningsRisk: false },
+            };
+          });
+
+          return {
+            ticker, price: spot,
+            buckets: {
+              bullish: scored.filter(s => s.type === "bullish").sort((a, b) => b.compositeScore - a.compositeScore),
+              neutral: scored.filter(s => s.type === "neutral").sort((a, b) => b.compositeScore - a.compositeScore),
+              bearish: scored.filter(s => s.type === "bearish").sort((a, b) => b.compositeScore - a.compositeScore),
+            },
+            debugReason: "",
+          };
         } catch (err) {
-          return { ticker, price: 0, strategies: [], signals: {} as never, debugReason: err instanceof Error ? err.message : "Hata" };
+          return { ticker, price: 0, buckets: { bullish: [] as never[], neutral: [] as never[], bearish: [] as never[] }, debugReason: err instanceof Error ? err.message : "Hata" };
         }
       }));
 
-      // Flatten all strategies, attach ticker info, sort by composite score
-      const allStrategies = results.flatMap((r) =>
-        r.strategies.map((s) => ({ ...s, ticker: r.ticker, tickerPrice: r.price, tickerSignals: r.signals }))
-      );
-      allStrategies.sort((a, b) => b.compositeScore - a.compositeScore);
-
-      // Budget filter: filter strategies where max loss exceeds budget
-      const affordable = allStrategies.filter((s) => Math.abs(s.maxLoss) <= input.budget);
+      const allStrategies = results.flatMap(r => [...r.buckets.bullish, ...r.buckets.neutral, ...r.buckets.bearish]);
+      const affordable = allStrategies.filter(s => Math.abs(s.maxLoss) <= input.budget || !isFinite(s.maxLoss));
 
       return {
         totalTickers: tickers.length,
-        scannedTickers: results.filter((r) => r.strategies.length > 0).length,
-        topStrategies: affordable.slice(0, 20),
+        scannedTickers: results.filter(r => r.debugReason === "").length,
+        topStrategies: affordable.sort((a, b) => b.compositeScore - a.compositeScore).slice(0, 20),
         allStrategies: affordable,
-        diagnostics: results.filter((r) => r.debugReason).map((r) => ({ ticker: r.ticker, reason: r.debugReason })),
+        buckets: {
+          bullish: affordable.filter(s => s.type === "bullish").sort((a, b) => b.compositeScore - a.compositeScore),
+          neutral: affordable.filter(s => s.type === "neutral").sort((a, b) => b.compositeScore - a.compositeScore),
+          bearish: affordable.filter(s => s.type === "bearish").sort((a, b) => b.compositeScore - a.compositeScore),
+        },
+        diagnostics: results.filter(r => r.debugReason).map(r => ({ ticker: r.ticker, reason: r.debugReason })),
       };
     }),
 
@@ -646,22 +797,15 @@ export const signallabRouter = router({
           const ivData = await yahoo.fetchIVRank(ticker).catch(() => ({ ivRank: 50, currentIV: 25 }));
 
           // Earnings check
-          let earningsInWindow: boolean | null = null;
+          let earningsInWin: boolean | null = null;
           try {
-            const calUrl = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${ticker}?modules=calendarEvents`;
-            const calJson = await yahoo.fetchJSON(calUrl) as { quoteSummary?: { result?: Array<{ calendarEvents?: { earnings?: { earningsDate?: Array<{ raw?: number }> } } }> } };
-            const dates = calJson?.quoteSummary?.result?.[0]?.calendarEvents?.earnings?.earningsDate;
-            if (dates && dates.length > 0) {
-              const now = Date.now();
-              const frontExp = new Date((frontExpiry ?? "") + "T00:00:00Z").getTime();
-              earningsInWindow = dates.some((d) => d.raw && d.raw * 1000 >= now && d.raw * 1000 <= frontExp);
-            }
+            earningsInWin = await earningsInWindow(ticker, frontExpiry ?? "");
           } catch {}
 
           // Sell gate — neutral when no IV data
           const gate = atmIvFront === null
             ? { color: "neutral" as const, label: "VERİ YOK", reasons: ["IV verisi alınamadı — piyasa kapalı olabilir veya zincir verisi eksik"] }
-            : sellGate({ vrp, termContango, earningsInWindow, ivPercentile: ivData.ivRank });
+            : sellGate({ vrp, termContango, earningsInWindow: earningsInWin, ivPercentile: ivData.ivRank });
 
           // Diagnostics
           const allFrontOpts = frontChain ? [...frontChain.calls, ...frontChain.puts] : [];
@@ -683,7 +827,7 @@ export const signallabRouter = router({
             gex: gex ? { levels: gexLevels, flip: gex.flip, callWall: gex.callWall, putWall: gex.putWall, totalNetGex: gex.totalNetGex } : null,
             gexSkipReason,
             ivPercentile: ivData.ivRank,
-            earningsInWindow,
+            earningsInWindow: earningsInWin,
             gate,
             diag,
             error: null,

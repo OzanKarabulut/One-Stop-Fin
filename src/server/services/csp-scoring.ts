@@ -103,8 +103,10 @@ export function scoreCSPContract(input: CSPScoringInput): CSPScoringResult {
   // Sweet spot: 5-14 days = no penalty
 
   // ─── PREMIUM SCORE (40%) ───────────────────────────────────────────────────
+  // Extreme IV is priced risk, not free yield — diminishing returns above 100% ann yield, cap at 140%
+  const cappedAnnYield = annualizedYield <= 100 ? annualizedYield : annualizedYield <= 140 ? 100 + (annualizedYield - 100) * 0.5 : 120;
   const premiumScore = clamp(
-    0.5 * scaleUp(annualizedYield, 20, 200) +
+    0.5 * scaleUp(cappedAnnYield, 20, 200) +
     0.3 * scaleUp(premiumPerDay, 0.03, 0.25) +
     0.2 * scaleUp(executablePremiumAmount, 30, 400)
   );
@@ -146,7 +148,7 @@ export function scoreCSPContract(input: CSPScoringInput): CSPScoringResult {
   );
 
   // ─── FINAL SCORE ───────────────────────────────────────────────────────────
-  const rawScore = 0.40 * premiumScore + 0.35 * safetyScore + 0.15 * qualityScore + 0.10 * liquidityScore - dtePenalty;
+  const rawScore = 0.30 * premiumScore + 0.40 * safetyScore + 0.15 * qualityScore + 0.15 * liquidityScore - dtePenalty;
   const cspScore = rejected ? 0 : Math.round(clamp(rawScore));
 
   // Action label

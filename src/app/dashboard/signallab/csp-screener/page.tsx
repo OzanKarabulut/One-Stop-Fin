@@ -76,7 +76,7 @@ function Metric({ label, value, color, align = "left" }: { label: string; value:
   );
 }
 
-function PickCard({ pick, budget, onAdd }: { pick: Pick; budget: number; onAdd: (p: Pick) => void }) {
+function PickCard({ pick, budget, onAdd, putWall }: { pick: Pick; budget: number; onAdd: (p: Pick) => void; putWall?: number | null }) {
   const contracts = pick.collateral > 0 ? Math.floor(budget / pick.collateral) : 0;
   const periodIncome = contracts * pick.executablePremiumAmount;
   const breakeven = pick.strike - pick.premium / 100;
@@ -88,7 +88,11 @@ function PickCard({ pick, budget, onAdd }: { pick: Pick; budget: number; onAdd: 
         <div>
           <div className="flex items-center gap-1.5 text-base font-bold tracking-tight text-white">
             {pick.ticker} <span className="text-white/90">{pick.strike.toFixed(0)}P</span>
+            {putWall && pick.strike < putWall && <span title="Put wall altında — dealer long gamma destek bölgesi">🛡</span>}
             <QualityBadge grade={pick.companyQuality} />
+            {(pick as Pick & { hasEarnings?: boolean }).hasEarnings && (
+              <span className="text-red-400 text-xs font-bold" title="Vade içinde earnings — binary event riski, skor düşürüldü">📊 ERN</span>
+            )}
           </div>
           <div className="mt-0.5 text-xs font-bold text-white/90 tabular-nums">Spot ${pick.spot.toFixed(2)} · {pick.dte} gün</div>
         </div>
@@ -99,7 +103,13 @@ function PickCard({ pick, budget, onAdd }: { pick: Pick; budget: number; onAdd: 
 
       <div className="grid grid-cols-2 gap-x-3 gap-y-2.5">
         <Metric label="Prim" value={usd(pick.executablePremiumAmount)} color="text-emerald-400" />
-        <Metric label="Getiri" value={`${pick.yieldPct.toFixed(2)}%`} color="text-emerald-400" align="right" />
+        <div className="text-right">
+          <div className="text-xs font-bold text-white/90">Getiri</div>
+          <div className="text-sm font-bold tabular-nums text-emerald-400">
+            {pick.yieldPct.toFixed(2)}%
+            {(pick as Pick & { priceQuality?: string }).priceQuality === "last" && <span className="ml-1 text-white/50 text-[10px]">(son işlem)</span>}
+          </div>
+        </div>
         <Metric label="IV" value={pick.iv ? `${pick.iv.toFixed(0)}%` : "—"} color="text-yellow-400" />
         <Metric label="Buffer" value={`${otmPct(pick.spot, pick.strike).toFixed(0)}%`} align="right" />
         <Metric label="Breakeven" value={`$${breakeven.toFixed(0)}`} />
@@ -119,6 +129,8 @@ function PickCard({ pick, budget, onAdd }: { pick: Pick; budget: number; onAdd: 
 function TickerGroup({ group, onAdd, maxStrike }: { group: Group; onAdd: (s: Pick) => void; maxStrike?: number | null }) {
   const [open, setOpen] = useState(false);
   const best = useMemo(() => group.strikes.reduce((a, b) => (b.cspScore > a.cspScore ? b : a), group.strikes[0]), [group.strikes]);
+  const pw = (group as Group & { putWall?: number | null }).putWall ?? null;
+  const effectiveMaxStrike = maxStrike ?? pw;
 
   return (
     <div className="border-b border-white/[0.06] last:border-b-0">
@@ -131,6 +143,7 @@ function TickerGroup({ group, onAdd, maxStrike }: { group: Group; onAdd: (s: Pic
           <IVClassBadge ivClass={group.bestClass} />
         </div>
         <div className="flex items-center gap-5 text-sm font-bold text-white/90 tabular-nums ml-auto">
+          {pw && <span className="text-red-400">PW: ${pw.toFixed(0)}</span>}
           {best && (
             <span className="hidden sm:inline w-[140px]">
               En iyi <span className="text-white">${best.strike.toFixed(0)}P</span>
@@ -162,9 +175,18 @@ function TickerGroup({ group, onAdd, maxStrike }: { group: Group; onAdd: (s: Pic
             <tbody>
               {group.strikes.map((s) => (
                 <tr key={`${s.ticker}-${s.strike}`} className="border-b border-white/[0.03] hover:bg-white/[0.03]">
-                  <td className="w-16 pl-4 pr-0 py-2 font-bold text-white">${s.strike.toFixed(1)}{maxStrike && s.strike < maxStrike && <span title="Put Wall altı"> 🛡</span>}</td>
+                  <td className="w-16 pl-4 pr-0 py-2 font-bold text-white">
+                    ${s.strike.toFixed(1)}
+                    {effectiveMaxStrike && s.strike < effectiveMaxStrike && <span title="Put wall altında — dealer long gamma destek bölgesi"> 🛡</span>}
+                    {(s as Pick & { hasEarnings?: boolean }).hasEarnings && (
+                      <span className="ml-1 text-red-400 text-xs" title="Vade içinde earnings — binary event riski, skor düşürüldü">📊 ERN</span>
+                    )}
+                  </td>
                   <td className="pl-0 pr-2 py-2 text-center font-bold text-[#ff7200]">{otmPct(group.spot, s.strike).toFixed(1).replace(".", ",")}%</td>
-                  <td className="px-2 py-2 text-center font-bold text-emerald-400">{usd(s.premium)}</td>
+                  <td className="px-2 py-2 text-center font-bold text-emerald-400">
+                    {usd(s.premium)}
+                    {(s as Pick & { priceQuality?: string }).priceQuality === "last" && <span className="ml-0.5 text-white/50 text-[10px]">(son işlem)</span>}
+                  </td>
                   <td className="px-2 py-2 text-center text-emerald-400">{s.yieldPct.toFixed(2)}%</td>
                   <td className="px-2 py-2 text-center"><span className={cn("font-bold", scoreColor(s.cspScore))}>{s.cspScore.toFixed(0)}</span></td>
                   <td className="px-2 py-2 text-center text-yellow-400">{s.iv ? `${s.iv.toFixed(0)}%` : "—"}</td>
@@ -341,6 +363,12 @@ function CSPScreenerInner() {
     return groups;
   }, [data?.groups, hideK4, sortKey]);
 
+  const putWallMap = useMemo(() => {
+    const m = new Map<string, number | null>();
+    if (data?.groups) for (const g of data.groups) m.set(g.ticker, (g as Group & { putWall?: number | null }).putWall ?? null);
+    return m;
+  }, [data?.groups]);
+
   const addToBasket = useCallback((c: Pick) => {
     setBasket((prev) => {
       const id = `${c.ticker}-${c.strike}-${c.expiry}`;
@@ -455,7 +483,7 @@ function CSPScreenerInner() {
             <div className="space-y-3">
               <h3 className="text-sm font-bold uppercase tracking-wide text-[#ff7200]">🏆 Tüm Kontratlar Arasında En İyi 3</h3>
               <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-3">
-                {data!.topPicks["all"].map((p, i) => <PickCard key={`all-${p.ticker}-${p.strike}-${i}`} pick={p} budget={budget} onAdd={addToBasket} />)}
+                {data!.topPicks["all"].map((p, i) => <PickCard key={`all-${p.ticker}-${p.strike}-${i}`} pick={p} budget={budget} onAdd={addToBasket} putWall={putWallMap.get(p.ticker)} />)}
               </div>
             </div>
           )}
@@ -484,7 +512,7 @@ function CSPScreenerInner() {
                     <div className="flex h-24 items-center justify-center rounded-lg border border-dashed border-white/10 text-sm font-bold text-white/90">Uygun fırsat yok</div>
                   ) : (
                     <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-3">
-                      {picks.map((p, i) => <PickCard key={`${p.ticker}-${p.strike}-${i}`} pick={p} budget={budget} onAdd={addToBasket} />)}
+                      {picks.map((p, i) => <PickCard key={`${p.ticker}-${p.strike}-${i}`} pick={p} budget={budget} onAdd={addToBasket} putWall={putWallMap.get(p.ticker)} />)}
                     </div>
                   )}
                 </div>

@@ -7,6 +7,7 @@ import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/server/root";
 import { useScanState } from "@/hooks/useScanState";
 import { usd } from "@/lib/format";
+import { pnlAt, type Leg } from "@/lib/real-world-pricing";
 import {
   Brain,
   Loader2,
@@ -72,31 +73,17 @@ interface ScenarioRow {
 
 function calcScenarios(strategy: StrategyItem): ScenarioRow[] {
   const spot = strategy.tickerPrice;
+  const legs: Leg[] = strategy.legs.map(l => ({
+    kind: l.type as "stock" | "call" | "put",
+    qty: l.action === "buy" ? l.contracts : -l.contracts,
+    strike: l.strike || undefined,
+    price: l.price,
+  }));
   const pcts = [-20, -15, -10, -5, -3, 0, 3, 5, 10, 15, 20];
-  return pcts.map((pct) => {
+  return pcts.map(pct => {
     const price = spot * (1 + pct / 100);
-    let pnl = 0;
-    for (const leg of strategy.legs) {
-      const mult = leg.action === "sell" ? 1 : -1;
-      if (leg.type === "stock") {
-        const stockPnl = (price - leg.price) * leg.contracts;
-        pnl += leg.action === "buy" ? stockPnl : -stockPnl;
-      } else if (leg.type === "call") {
-        const intrinsic = Math.max(price - leg.strike, 0);
-        const value = intrinsic * leg.contracts * 100;
-        const cost = leg.price * leg.contracts * 100;
-        pnl += mult * (cost - value);
-      } else if (leg.type === "put") {
-        const intrinsic = Math.max(leg.strike - price, 0);
-        const value = intrinsic * leg.contracts * 100;
-        const cost = leg.price * leg.contracts * 100;
-        pnl += mult * (cost - value);
-      }
-    }
-    let outcome = "Nötr";
-    if (pnl > 50) outcome = "Kâr ✓";
-    else if (pnl < -50) outcome = "Zarar ✗";
-    return { price, changePct: pct, pnl, outcome };
+    const pnl = pnlAt(price, legs);
+    return { price, changePct: pct, pnl, outcome: pnl > 50 ? "Kâr ✓" : pnl < -50 ? "Zarar ✗" : "Nötr" };
   });
 }
 
@@ -104,7 +91,6 @@ function ScenarioPanel({ strategy, onClose }: { strategy: StrategyItem; onClose:
   const scenarios = useMemo(() => calcScenarios(strategy), [strategy]);
   const maxAbsPnl = Math.max(...scenarios.map((s) => Math.abs(s.pnl)), 1);
 
-  // Investment summary
   const totalInvest = strategy.legs.reduce((sum, leg) => {
     if (leg.type === "stock" && leg.action === "buy") return sum + leg.price * leg.contracts;
     if (leg.type !== "stock" && leg.action === "buy") return sum + leg.price * leg.contracts * 100;
@@ -112,7 +98,6 @@ function ScenarioPanel({ strategy, onClose }: { strategy: StrategyItem; onClose:
   }, 0);
   const totalCollateral = strategy.legs.reduce((sum, leg) => {
     if (leg.type === "put" && leg.action === "sell") return sum + leg.strike * leg.contracts * 100;
-    if (leg.type === "call" && leg.action === "sell" && strategy.legs.some((l) => l.type === "stock")) return sum; // covered
     return sum;
   }, 0);
   const netCreditTotal = strategy.netCredit * 100;
@@ -121,7 +106,6 @@ function ScenarioPanel({ strategy, onClose }: { strategy: StrategyItem; onClose:
 
   return (
     <div className="mt-3 rounded-xl border border-[#ff7200]/30 bg-[#0a0a0c] overflow-hidden">
-      {/* Header */}
       <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
         <h3 className="text-sm font-bold text-white flex items-center gap-2">
           <BarChart3 className="h-4 w-4 text-[#ff7200]" />
@@ -132,9 +116,7 @@ function ScenarioPanel({ strategy, onClose }: { strategy: StrategyItem; onClose:
         </button>
       </div>
 
-      {/* Content: Table left 2/3, Summary right 1/3 */}
       <div className="flex flex-col lg:flex-row gap-6 p-4">
-        {/* Table — left 2/3 */}
         <div className="lg:w-[66%] overflow-x-auto rounded-lg border border-white/[0.06] bg-white/[0.01] px-4 py-3">
           <table className="w-full text-sm font-bold tabular-nums">
             <thead>
@@ -156,11 +138,7 @@ function ScenarioPanel({ strategy, onClose }: { strategy: StrategyItem; onClose:
                       <span className={cn("font-bold", isSpot ? "text-[#ff7200]" : "text-white")}>${row.price.toFixed(2)}</span>
                     </td>
                     <td className="py-2 text-center">
-                      <span className={cn("font-bold",
-                        row.changePct > 0 ? "text-emerald-400" :
-                        row.changePct < 0 ? "text-red-400" :
-                        "text-white/90"
-                      )}>
+                      <span className={cn("font-bold", row.changePct > 0 ? "text-emerald-400" : row.changePct < 0 ? "text-red-400" : "text-white/90")}>
                         {row.changePct > 0 ? "+" : ""}{row.changePct}%
                       </span>
                     </td>
@@ -181,9 +159,7 @@ function ScenarioPanel({ strategy, onClose }: { strategy: StrategyItem; onClose:
                       </div>
                     </td>
                     <td className="py-2 text-right">
-                      <span className={cn("font-bold",
-                        row.pnl > 50 ? "text-emerald-400" : row.pnl < -50 ? "text-red-400" : "text-white/90"
-                      )}>
+                      <span className={cn("font-bold", row.pnl > 50 ? "text-emerald-400" : row.pnl < -50 ? "text-red-400" : "text-white/90")}>
                         {row.outcome}
                       </span>
                     </td>
@@ -194,7 +170,6 @@ function ScenarioPanel({ strategy, onClose }: { strategy: StrategyItem; onClose:
           </table>
         </div>
 
-        {/* Summary — right 1/3 */}
         <div className="lg:w-[34%] rounded-lg border border-white/[0.06] bg-white/[0.01] px-5 py-4 space-y-4">
           <div className="text-center rounded-lg bg-[#ff7200]/10 border border-[#ff7200]/20 py-3">
             <div className="text-xs font-bold uppercase tracking-wide text-[#ff7200]">Mevcut Fiyat</div>
@@ -241,6 +216,16 @@ function ScenarioPanel({ strategy, onClose }: { strategy: StrategyItem; onClose:
               <span className="text-sm font-bold text-red-400 tabular-nums">{usd(Math.min(...scenarios.map((s) => s.pnl)))}</span>
             </div>
           </div>
+
+          {strategy.sigmaUsed && (
+            <div className="text-xs font-bold text-white/90 mt-2 border-t border-white/10 pt-2">
+              <div className="text-[#ff7200] mb-1">Varsayımlar</div>
+              <div>σ = HV {(strategy.sigmaUsed * 100).toFixed(1)}%</div>
+              <div>drift = 0</div>
+              <div>fiyat = piyasa</div>
+              <div>olasılıklar = gerçek-dünya</div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -250,6 +235,9 @@ function ScenarioPanel({ strategy, onClose }: { strategy: StrategyItem; onClose:
 function StrategyCard({ strategy, rank }: { strategy: StrategyItem; rank: number }) {
   const [open, setOpen] = useState(false);
   const [showScenarios, setShowScenarios] = useState(false);
+
+  const isShortPrem = ["Cash-Secured Put", "Wheel", "Covered Call", "Covered Strangle", "Collar"].includes(strategy.name);
+  const edgePositive = isShortPrem ? (strategy.vrp ?? 0) > 0 : (strategy.vrp ?? 0) < 0;
 
   return (
     <div className={cn("rounded-xl border bg-[#0e0e10] transition-all", rank <= 3 ? "border-[#ff7200]/40" : "border-white/10")}>
@@ -274,9 +262,14 @@ function StrategyCard({ strategy, rank }: { strategy: StrategyItem; rank: number
               showScenarios ? "bg-[#ff7200]/20 text-[#ff7200] border border-[#ff7200]/40" : "bg-[#ff7200] text-white hover:bg-[#ff8c3a]")}>
             <BarChart3 className="h-4 w-4" /> Senaryolar
           </button>
-          <span className={cn("text-2xl font-bold tabular-nums", scoreColor(strategy.compositeScore))}>
-            {strategy.compositeScore.toFixed(0)}
-          </span>
+          <div className="text-right">
+            <span className={cn("text-2xl font-bold tabular-nums", scoreColor(strategy.compositeScore))}>
+              {strategy.compositeScore.toFixed(0)}
+            </span>
+            {strategy.kellyPct != null && (
+              <div className="text-xs font-bold text-white/70">¼ Kelly: {strategy.kellyPct.toFixed(1)}%</div>
+            )}
+          </div>
           <button onClick={() => setOpen(!open)}>
             {open ? <ChevronDown className="h-4 w-4 text-white/80" /> : <ChevronRight className="h-4 w-4 text-white/80" />}
           </button>
@@ -286,6 +279,14 @@ function StrategyCard({ strategy, rank }: { strategy: StrategyItem; rank: number
       {/* Expanded detail */}
       {open && (
         <div className="border-t border-white/[0.06] px-4 pb-4 pt-3 space-y-3">
+          {/* Edge label */}
+          {strategy.why && (
+            <div className={cn("rounded-md px-3 py-2 text-sm font-bold",
+              edgePositive ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400" : "bg-red-500/10 border border-red-500/20 text-red-400")}>
+              💡 {strategy.why}
+            </div>
+          )}
+
           {/* Metrics */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div>
@@ -294,11 +295,11 @@ function StrategyCard({ strategy, rank }: { strategy: StrategyItem; rank: number
             </div>
             <div>
               <div className="text-sm font-bold text-white">Max Kâr</div>
-              <div className="text-sm font-bold text-emerald-400 tabular-nums">{usd(strategy.maxProfit)}</div>
+              <div className="text-sm font-bold text-emerald-400 tabular-nums">{isFinite(strategy.maxProfit) ? usd(strategy.maxProfit) : "∞"}</div>
             </div>
             <div>
               <div className="text-sm font-bold text-white">Max Zarar</div>
-              <div className="text-sm font-bold text-red-400 tabular-nums">{usd(Math.abs(strategy.maxLoss))}</div>
+              <div className="text-sm font-bold text-red-400 tabular-nums">{isFinite(strategy.maxLoss) ? usd(Math.abs(strategy.maxLoss)) : "∞"}</div>
             </div>
             <div>
               <div className="text-sm font-bold text-white">EV</div>
@@ -309,12 +310,18 @@ function StrategyCard({ strategy, rank }: { strategy: StrategyItem; rank: number
               <div className={cn("text-sm font-bold tabular-nums", strategy.evPct > 0 ? "text-emerald-400" : "text-red-400")}>{strategy.evPct.toFixed(1)}%</div>
             </div>
             <div>
-              <div className="text-sm font-bold text-white">Vol Edge</div>
-              <div className={cn("text-sm font-bold tabular-nums", strategy.volEdge > 0 ? "text-yellow-400" : "text-blue-400")}>{strategy.volEdge.toFixed(1)}%</div>
+              <div className="text-sm font-bold text-white">VRP</div>
+              <div className={cn("text-sm font-bold tabular-nums", (strategy.vrp ?? 0) > 0 ? "text-yellow-400" : "text-blue-400")}>
+                {strategy.vrp !== null ? `${(strategy.vrp * 100).toFixed(1)}%` : "—"}
+              </div>
             </div>
             <div>
               <div className="text-sm font-bold text-white">Net Kredi</div>
               <div className="text-sm font-bold text-white tabular-nums">${strategy.netCredit.toFixed(2)}</div>
+            </div>
+            <div>
+              <div className="text-sm font-bold text-white">¼ Kelly</div>
+              <div className="text-sm font-bold text-white tabular-nums">{strategy.kellyPct?.toFixed(1) ?? "—"}%</div>
             </div>
           </div>
 
@@ -344,13 +351,6 @@ function StrategyCard({ strategy, rank }: { strategy: StrategyItem; rank: number
               ))}
             </div>
           </div>
-
-          {/* Why */}
-          {strategy.why && (
-            <div className="rounded-md bg-[#ff7200]/5 border border-[#ff7200]/20 px-3 py-2 text-sm font-bold text-[#ff7200]">
-              💡 {strategy.why}
-            </div>
-          )}
         </div>
       )}
 
@@ -463,16 +463,28 @@ export default function AIStrategyPage() {
         </div>
       )}
 
-      {/* Results */}
-      {data && data.topStrategies.length > 0 && (
-        <div className="space-y-3">
-          <h2 className="text-sm font-bold text-white flex items-center gap-2">
-            <Brain className="h-4 w-4 text-[#ff7200]" /> En İyi Stratejiler
-          </h2>
-          {data.topStrategies.map((s, i) => (
-            <StrategyCard key={`${s.ticker}-${s.name}-${i}`} strategy={s} rank={i + 1} />
-          ))}
-        </div>
+      {/* Bucket Results */}
+      {data && (
+        <>
+          {data.buckets.bullish.length > 0 && (
+            <div className="space-y-3">
+              <h2 className="text-sm font-bold text-white flex items-center gap-2">🐂 Yükseliş</h2>
+              {data.buckets.bullish.map((s, i) => <StrategyCard key={`${s.ticker}-${s.name}-bull-${i}`} strategy={s} rank={i + 1} />)}
+            </div>
+          )}
+          {data.buckets.neutral.length > 0 && (
+            <div className="space-y-3">
+              <h2 className="text-sm font-bold text-white flex items-center gap-2">⚖️ Nötr / Gelir</h2>
+              {data.buckets.neutral.map((s, i) => <StrategyCard key={`${s.ticker}-${s.name}-neut-${i}`} strategy={s} rank={i + 1} />)}
+            </div>
+          )}
+          {data.buckets.bearish.length > 0 && (
+            <div className="space-y-3">
+              <h2 className="text-sm font-bold text-white flex items-center gap-2">🐻 Düşüş</h2>
+              {data.buckets.bearish.map((s, i) => <StrategyCard key={`${s.ticker}-${s.name}-bear-${i}`} strategy={s} rank={i + 1} />)}
+            </div>
+          )}
+        </>
       )}
 
       {/* Diagnostics */}
@@ -500,7 +512,7 @@ export default function AIStrategyPage() {
         </div>
       )}
 
-      {data && data.topStrategies.length === 0 && !isLoading && (
+      {data && data.allStrategies.length === 0 && !isLoading && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <Brain className="mb-4 h-10 w-10 text-white/15" />
           <p className="text-sm font-bold text-white/90">Bütçeye uygun strateji bulunamadı. Bütçeyi artırın veya farklı tickerlar deneyin.</p>

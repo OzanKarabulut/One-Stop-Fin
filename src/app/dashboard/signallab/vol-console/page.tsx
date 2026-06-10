@@ -199,45 +199,51 @@ export default function VolConsolePage() {
         <div className="space-y-3">
           {data.results.filter((r) => !r.error).map((r) => (
             <div key={r.ticker} className="rounded-xl border border-white/10 bg-[#0e0e10] p-3">
-              {/* Row 1: metrics + gate badge + Detay button */}
-              <div className="flex items-center gap-3 flex-wrap text-xs font-bold">
-                <span className="text-sm font-bold text-white">{r.ticker}</span>
-                <span className="text-white/90">${r.spot.toFixed(2)}</span>
-                <span>HV20 <span className="text-white">{r.hv20 ? (r.hv20 * 100).toFixed(1) : "—"}</span></span>
-                <span>HV60 <span className="text-white">{r.hv60 ? (r.hv60 * 100).toFixed(1) : "—"}</span></span>
-                <span>IV(F) <span className="text-yellow-400">{r.atmIvFront?.toFixed(1) ?? "—"}</span></span>
-                <span>IV(B) <span className="text-white/90">{r.atmIvBack?.toFixed(1) ?? "—"}</span></span>
-                <span>VRP <span className={r.vrp !== null && r.vrp >= 0.03 ? "text-emerald-400" : r.vrp !== null && r.vrp < -0.02 ? "text-red-400" : "text-white/90"}>{r.vrp !== null ? (r.vrp * 100).toFixed(1) : "—"}</span></span>
-                <span>Term <span className={r.termContango === true ? "text-emerald-400" : r.termContango === false ? "text-red-400" : "text-white/90"}>{r.termContango === true ? "C" : r.termContango === false ? "B" : "—"}</span></span>
-                <span>Skew <span className="text-white/90">{r.skew25?.toFixed(1) ?? "—"}</span></span>
-                <span>IV%ile <span className="text-white/90">{typeof r.ivPercentile === "number" ? r.ivPercentile.toFixed(0) : "—"}</span></span>
-                {/* Gate badge */}
-                {r.gate && (
-                  <span className={`rounded px-2 py-0.5 text-xs font-bold ${
-                    r.gate.color === "green" ? "bg-emerald-500/20 text-emerald-400" :
-                    r.gate.color === "yellow" ? "bg-yellow-500/20 text-yellow-400" :
-                    r.gate.color === "red" ? "bg-red-500/20 text-red-400" :
-                    "bg-white/10 text-white/70"
-                  }`}>{r.gate.label}</span>
-                )}
-                {/* Detay button */}
-                {r.gate && r.gate.color !== "neutral" && (
-                  <button onClick={() => toggleDetail(r.ticker)} className="bg-[#ff7200] text-white font-bold rounded px-2 py-1 text-xs hover:bg-[#ff8a2b]">
-                    Detay {openDetails[r.ticker] ? "▾" : "▸"}
-                  </button>
-                )}
+              {/* Row 1: metrics left, gate+detay right */}
+              <div className="flex items-center justify-between text-xs font-bold">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="text-sm font-bold text-white">{r.ticker}</span>
+                  <span className="text-white/90">${r.spot.toFixed(2)}</span>
+                  <span>HV20 <span className="text-white">{r.hv20 ? (r.hv20 * 100).toFixed(1) : "—"}</span></span>
+                  <span>HV60 <span className="text-white">{r.hv60 ? (r.hv60 * 100).toFixed(1) : "—"}</span></span>
+                  <span>IV(F) <span className="text-yellow-400">{r.atmIvFront?.toFixed(1) ?? "—"}</span></span>
+                  <span>IV(B) <span className="text-white/90">{r.atmIvBack?.toFixed(1) ?? "—"}</span></span>
+                  <span>VRP <span className={r.vrp !== null && r.vrp >= 0.03 ? "text-emerald-400" : r.vrp !== null && r.vrp < -0.02 ? "text-red-400" : "text-white/90"}>{r.vrp !== null ? (r.vrp * 100).toFixed(1) : "—"}</span></span>
+                  <span>Term <span className={r.termContango === true ? "text-emerald-400" : r.termContango === false ? "text-red-400" : "text-white/90"}>{r.termContango === true ? "C" : r.termContango === false ? "B" : "—"}</span></span>
+                  <span>Skew <span className="text-white/90">{r.skew25?.toFixed(1) ?? "—"}</span></span>
+                  <span>IV%ile <span className="text-white/90">{typeof r.ivPercentile === "number" ? r.ivPercentile.toFixed(0) : "—"}</span></span>
+                </div>
+                <div className="flex items-center gap-3 shrink-0 ml-3">
+                  {/* Gate badge */}
+                  {r.gate && (
+                    <span className={`rounded-lg px-4 py-3 text-sm font-bold ${
+                      r.gate.color === "green" ? "bg-emerald-500/20 text-emerald-400" :
+                      r.gate.color === "yellow" ? "bg-yellow-500/20 text-yellow-400" :
+                      r.gate.color === "red" ? "bg-red-500/20 text-red-400" :
+                      "bg-white/10 text-white/70"
+                    }`}>{r.gate.label}</span>
+                  )}
+                  {/* Detay button */}
+                  {r.gate && r.gate.color !== "neutral" && (
+                    <button onClick={() => toggleDetail(r.ticker)}
+                      className={cn("flex items-center justify-center gap-1.5 rounded-lg w-[120px] py-3 text-sm font-bold transition-colors",
+                        openDetails[r.ticker] ? "bg-[#ff7200]/20 text-[#ff7200] border border-[#ff7200]/40" : "bg-[#ff7200] text-white hover:bg-[#ff8a2b]")}>
+                      Detay {openDetails[r.ticker] ? "▾" : "▸"}
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Row 2: GEX summary line */}
               {r.gex ? (
-                <div className="mt-1.5 flex items-center gap-3 text-xs font-bold">
+                <div className="mt-3 flex items-center gap-3 text-xs font-bold">
                   <span>CW <span className="text-emerald-400">${r.gex.callWall ?? "—"}</span></span>
                   <span>PW <span className="text-red-400">${r.gex.putWall ?? "—"}</span></span>
                   <span>Flip <span className="text-yellow-400">${r.gex.flip?.toFixed(0) ?? "—"}</span></span>
                   {r.gex.putWall && <span className="text-white/90 ml-2">Önerilen CSP bölgesi: &lt; ${r.gex.putWall}</span>}
                   {r.gate && r.gate.color !== "red" && r.gate.color !== "neutral" && (
                     <a href={`/dashboard/signallab/csp-screener?ticker=${r.ticker}${r.gex.putWall ? `&maxStrike=${r.gex.putWall}` : ""}`}
-                      className="ml-auto bg-[#ff7200] text-white font-bold rounded px-2 py-1 text-xs hover:bg-[#ff8a2b]">
+                      className="ml-auto flex items-center justify-center rounded-lg w-[120px] py-3 text-sm font-bold bg-[#ff7200] text-white hover:bg-[#ff8a2b]">
                       CSP Tara →
                     </a>
                   )}
