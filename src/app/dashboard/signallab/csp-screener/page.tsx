@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { trpc } from "@/lib/trpc/client";
 import { cn } from "@/lib/utils";
 import type { inferRouterOutputs } from "@trpc/server";
@@ -115,7 +116,7 @@ function PickCard({ pick, budget, onAdd }: { pick: Pick; budget: number; onAdd: 
   );
 }
 
-function TickerGroup({ group, onAdd }: { group: Group; onAdd: (s: Pick) => void }) {
+function TickerGroup({ group, onAdd, maxStrike }: { group: Group; onAdd: (s: Pick) => void; maxStrike?: number | null }) {
   const [open, setOpen] = useState(false);
   const best = useMemo(() => group.strikes.reduce((a, b) => (b.cspScore > a.cspScore ? b : a), group.strikes[0]), [group.strikes]);
 
@@ -161,7 +162,7 @@ function TickerGroup({ group, onAdd }: { group: Group; onAdd: (s: Pick) => void 
             <tbody>
               {group.strikes.map((s) => (
                 <tr key={`${s.ticker}-${s.strike}`} className="border-b border-white/[0.03] hover:bg-white/[0.03]">
-                  <td className="w-16 pl-4 pr-0 py-2 font-bold text-white">${s.strike.toFixed(1)}</td>
+                  <td className="w-16 pl-4 pr-0 py-2 font-bold text-white">${s.strike.toFixed(1)}{maxStrike && s.strike < maxStrike && <span title="Put Wall altı"> 🛡</span>}</td>
                   <td className="pl-0 pr-2 py-2 text-center font-bold text-[#ff7200]">{otmPct(group.spot, s.strike).toFixed(1).replace(".", ",")}%</td>
                   <td className="px-2 py-2 text-center font-bold text-emerald-400">{usd(s.premium)}</td>
                   <td className="px-2 py-2 text-center text-emerald-400">{s.yieldPct.toFixed(2)}%</td>
@@ -268,6 +269,19 @@ function FloatingBasket({ basket, budget, onRemove, onUpdateQty, onClear }: {
 }
 
 export default function CSPScreenerPage() {
+  return (
+    <Suspense fallback={<div className="py-12 text-center text-sm font-bold text-white/90">Yükleniyor...</div>}>
+      <CSPScreenerInner />
+    </Suspense>
+  );
+}
+
+function CSPScreenerInner() {
+  const searchParams = useSearchParams();
+  const paramTicker = searchParams.get("ticker");
+  const paramMaxStrike = searchParams.get("maxStrike") ? Number(searchParams.get("maxStrike")) : null;
+  const autoScanned = useRef(false);
+
   const {
     fridays, mode, setMode, list: cspList, setList: setCspList,
     customTickers, setCustomTickers, budget, setBudget,
@@ -285,14 +299,28 @@ export default function CSPScreenerPage() {
   }, []);
 
   const scanInput = useMemo(
-    () => ({ watchlist: scanWatchlist, customTickers: scanTickers, expiry, minOI }),
-    [scanWatchlist, scanTickers, expiry, minOI],
+    () => ({
+      watchlist: (paramTicker && !autoScanned.current ? "custom" : scanWatchlist) as "all" | "custom",
+      customTickers: paramTicker && !autoScanned.current ? paramTicker : scanTickers,
+      expiry, minOI,
+    }),
+    [scanWatchlist, scanTickers, expiry, minOI, paramTicker],
   );
 
   const { data, error, refetch, isFetching } = trpc.signallab.cspScan.useQuery(scanInput, { enabled: false, refetchOnWindowFocus: false });
 
   const handleScan = useCallback(async () => { setScanning(true); await refetch(); setScanning(false); }, [refetch]);
   const isLoading = isFetching || scanning;
+
+  // Auto-scan when ticker param present
+  useEffect(() => {
+    if (paramTicker && !autoScanned.current) {
+      autoScanned.current = true;
+      setMode("custom");
+      setCustomTickers(paramTicker.toUpperCase());
+      setTimeout(() => { refetch(); }, 100);
+    }
+  }, [paramTicker, setMode, setCustomTickers, refetch]);
 
   useEffect(() => { localStorage.setItem("csp_basket", JSON.stringify(basket)); }, [basket]);
 
@@ -399,6 +427,12 @@ export default function CSPScreenerPage() {
         </div>
       )}
 
+      {paramMaxStrike && (
+        <div className="flex items-center gap-2 rounded-lg border border-[#ff7200]/30 bg-[#ff7200]/10 px-4 py-3 text-sm font-bold text-[#ff7200]">
+          🛡 GEX Put Wall filtresi aktif — Strike &lt; ${paramMaxStrike} kontratlar işaretlendi
+        </div>
+      )}
+
       {isLoading && !data && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           {[0, 1, 2].map((c) => (
@@ -481,7 +515,7 @@ export default function CSPScreenerPage() {
             </div>
           </div>
           <div>
-            {filteredGroups.map((group) => <TickerGroup key={group.ticker} group={group} onAdd={addToBasket} />)}
+            {filteredGroups.map((group) => <TickerGroup key={group.ticker} group={group} onAdd={addToBasket} maxStrike={paramMaxStrike} />)}
           </div>
         </div>
       )}

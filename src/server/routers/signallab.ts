@@ -9,6 +9,7 @@ import * as math from "../services/math-engine";
 import { impliedVolBisection } from "../services/black-scholes";
 import { scoreCSPContract, type IVBucket } from "../services/csp-scoring";
 import { marketData } from "../services/market-data";
+import { db } from "@/lib/db";
 
 // ─── CSP Screener Constants ──────────────────────────────────────────────────
 
@@ -441,6 +442,48 @@ export const signallabRouter = router({
     ozan: OZAN_TICKERS.split(","),
   })),
 
+  // Position marks (real prices for command center)
+  positionMarks: publicProcedure
+    .input(z.object({
+      positions: z.array(z.object({
+        id: z.number(),
+        ticker: z.string(),
+        strike: z.number(),
+        expiry: z.string(),
+        optionType: z.string(),
+      })),
+    }))
+    .query(async ({ input }) => {
+      const byTicker = new Map<string, typeof input.positions>();
+      for (const p of input.positions) {
+        const arr = byTicker.get(p.ticker) ?? [];
+        arr.push(p);
+        byTicker.set(p.ticker, arr);
+      }
+      const results: Array<{ id: number; spot: number; mark: number | null; iv: number | null }> = [];
+      await Promise.all([...byTicker.entries()].map(async ([ticker, positions]) => {
+        try {
+          const expiryInfo = await marketData.getExpirations(ticker);
+          const spot = expiryInfo.price;
+          for (const pos of positions) {
+            try {
+              const ts = expiryInfo.expirationTimestamps[pos.expiry];
+              const chain = await marketData.getChain(ticker, pos.expiry, ts);
+              const opts = pos.optionType === "call" ? chain.calls : chain.puts;
+              const match = opts.find((o) => Math.abs(o.strike - pos.strike) < 0.01);
+              const mark = match ? (match.bid + match.ask) / 2 || match.last : null;
+              results.push({ id: pos.id, spot, mark, iv: match?.iv ?? null });
+            } catch {
+              results.push({ id: pos.id, spot, mark: null, iv: null });
+            }
+          }
+        } catch {
+          for (const pos of positions) results.push({ id: pos.id, spot: 0, mark: null, iv: null });
+        }
+      }));
+      return results;
+    }),
+
   // Vol Console scan
   volScan: publicProcedure
     .input(z.object({
@@ -459,6 +502,9 @@ export const signallabRouter = router({
       const { historicalVol } = await import("@/lib/vol-math");
       const { computeGexProfile } = await import("@/lib/gex");
       const { sellGate } = await import("@/lib/sell-gate");
+
+      const ivPct = (raw: number | null | undefined): number | null =>
+        raw == null || raw <= 0 ? null : raw <= 3 ? raw * 100 : raw;
 
       const results = await Promise.all(tickers.map(async (ticker) => {
         try {
@@ -494,18 +540,18 @@ export const signallabRouter = router({
           const allFrontOpts = [...(frontChain?.puts ?? []), ...(frontChain?.calls ?? [])];
           const atmOpt = allFrontOpts.reduce((best, cur) =>
             Math.abs(cur.strike - spot) < Math.abs((best?.strike ?? 9999) - spot) ? cur : best, allFrontOpts[0]);
-          const atmIvFront = atmOpt?.iv ?? null;
+          const atmIvFront = ivPct(atmOpt?.iv);
 
           // ATM IV from back
           const allBackOpts = [...(backChain?.puts ?? []), ...(backChain?.calls ?? [])];
           const atmBack = allBackOpts.reduce((best, cur) =>
             Math.abs(cur.strike - spot) < Math.abs((best?.strike ?? 9999) - spot) ? cur : best, allBackOpts[0]);
-          const atmIvBack = atmBack?.iv ?? null;
+          const atmIvBack = ivPct(atmBack?.iv);
 
           // VRP = ATM IV - HV20
           const vrp = atmIvFront !== null && hv20 !== null ? (atmIvFront / 100) - hv20 : null;
-          // Term contango = front IV > back IV
-          const termContango = atmIvFront !== null && atmIvBack !== null ? atmIvFront > atmIvBack : null;
+          // Term contango = front IV < back IV (normal term structure)
+          const termContango = atmIvFront !== null && atmIvBack !== null ? atmIvFront < atmIvBack : null;
 
           // Skew25: 25-delta put IV vs ATM IV
           const puts25 = (frontChain?.puts ?? []).filter((p) => {
@@ -513,7 +559,7 @@ export const signallabRouter = router({
             return moneyness > 0.03 && moneyness < 0.12 && p.iv > 0;
           });
           const skew25 = puts25.length > 0 && atmIvFront
-            ? (puts25.reduce((s, p) => s + p.iv, 0) / puts25.length) - atmIvFront
+            ? (puts25.reduce((s, p) => s + (ivPct(p.iv) ?? 0), 0) / puts25.length) - atmIvFront
             : null;
 
           // GEX
@@ -521,25 +567,49 @@ export const signallabRouter = router({
             strike: o.strike,
             type: (frontChain?.calls ?? []).includes(o) ? "call" as const : "put" as const,
             openInterest: o.oi,
-            iv: o.iv > 0 ? o.iv / 100 : 0.3,
+            iv: (ivPct(o.iv) ?? 30) / 100,
           }));
           const gex = spot > 0 ? computeGexProfile(spot, T, gexContracts) : null;
+
+          // GEX levels: windowed ±25% around spot
+          let gexLevels: typeof gex extends null ? never : NonNullable<typeof gex>["levels"] = [];
+          if (gex) {
+            const windowed = gex.levels.filter(l => l.strike >= spot * 0.75 && l.strike <= spot * 1.25);
+            gexLevels = windowed.length >= 8 ? windowed : gex.levels.sort((a, b) => Math.abs(a.strike - spot) - Math.abs(b.strike - spot)).slice(0, 20).sort((a, b) => a.strike - b.strike);
+          }
+
+          // Fire-and-forget vol snapshot upsert
+          try { void db.volSnapshot.upsert({ where: { ticker_date: { ticker: ticker.toUpperCase(), date: new Date(new Date().toISOString().slice(0, 10)) } }, create: { ticker: ticker.toUpperCase(), date: new Date(new Date().toISOString().slice(0, 10)), atmIv: atmIvFront ?? 0, hv20 }, update: { atmIv: atmIvFront ?? 0, hv20 } }); } catch {}
 
           // IV percentile
           const ivData = await yahoo.fetchIVRank(ticker).catch(() => ({ ivRank: 50, currentIV: 25 }));
 
+          // Earnings check
+          let earningsInWindow: boolean | null = null;
+          try {
+            const calUrl = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${ticker}?modules=calendarEvents`;
+            const calJson = await yahoo.fetchJSON(calUrl) as { quoteSummary?: { result?: Array<{ calendarEvents?: { earnings?: { earningsDate?: Array<{ raw?: number }> } } }> } };
+            const dates = calJson?.quoteSummary?.result?.[0]?.calendarEvents?.earnings?.earningsDate;
+            if (dates && dates.length > 0) {
+              const now = Date.now();
+              const frontExp = new Date((frontExpiry ?? "") + "T00:00:00Z").getTime();
+              earningsInWindow = dates.some((d) => d.raw && d.raw * 1000 >= now && d.raw * 1000 <= frontExp);
+            }
+          } catch {}
+
           // Sell gate
-          const gate = sellGate({ vrp, termContango, earningsInWindow: null, ivPercentile: ivData.ivRank });
+          const gate = sellGate({ vrp, termContango, earningsInWindow, ivPercentile: ivData.ivRank });
 
           return {
             ticker, spot, hv20, hv60, atmIvFront, atmIvBack, vrp, termContango, skew25,
-            gex: gex ? { levels: gex.levels.slice(-20), flip: gex.flip, callWall: gex.callWall, putWall: gex.putWall, totalNetGex: gex.totalNetGex } : null,
+            gex: gex ? { levels: gexLevels, flip: gex.flip, callWall: gex.callWall, putWall: gex.putWall, totalNetGex: gex.totalNetGex } : null,
             ivPercentile: ivData.ivRank,
+            earningsInWindow,
             gate,
             error: null,
           };
         } catch (err) {
-          return { ticker, spot: 0, hv20: null, hv60: null, atmIvFront: null, atmIvBack: null, vrp: null, termContango: null, skew25: null, gex: null, ivPercentile: null, gate: null, error: err instanceof Error ? err.message : "Hata" };
+          return { ticker, spot: 0, hv20: null, hv60: null, atmIvFront: null, atmIvBack: null, vrp: null, termContango: null, skew25: null, gex: null, ivPercentile: null, earningsInWindow: null, gate: null, error: err instanceof Error ? err.message : "Hata" };
         }
       }));
 

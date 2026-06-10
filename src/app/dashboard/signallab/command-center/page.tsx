@@ -1,12 +1,16 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { trpc } from "@/lib/trpc/client";
 import { cn } from "@/lib/utils";
 import { usd } from "@/lib/format";
 import { positionActions, type ActionSignal } from "@/lib/position-actions";
 import { generateMarketEvents } from "@/lib/market-calendar";
+import { probITMPut, probITMCall } from "@/lib/vol-math";
 import { Shield, BookOpen, Loader2, Plus, X } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
+import { DetayButton } from "@/components/ui/DetailPanel";
+import { actionDetail } from "@/lib/detail-content";
 
 type Tab = "open" | "closed";
 
@@ -23,6 +27,8 @@ function ActionBadge({ signal }: { signal: ActionSignal }) {
 function EventBadge({ name }: { name: string }) {
   return <span className="rounded bg-[#ff7200]/15 px-1.5 py-0.5 text-xs font-bold text-[#ff7200]">{name}</span>;
 }
+
+const SEVERITY_ORDER: Record<string, number> = { red: 0, yellow: 1, green: 2, neutral: 3 };
 
 export default function CommandCenterPage() {
   const [tab, setTab] = useState<Tab>("open");
@@ -44,6 +50,29 @@ export default function CommandCenterPage() {
     onSuccess: () => { utils.positions.list.invalidate(); setShowForm(false); },
   });
 
+  // Fetch real marks for open positions
+  const positionsForMarks = useMemo(() => {
+    if (!openPositions.data) return [];
+    return openPositions.data.map((p) => ({
+      id: p.id,
+      ticker: p.ticker,
+      strike: p.strike,
+      expiry: new Date(p.expiry).toISOString().slice(0, 10),
+      optionType: p.optionType,
+    }));
+  }, [openPositions.data]);
+
+  const marksQuery = trpc.signallab.positionMarks.useQuery(
+    { positions: positionsForMarks },
+    { enabled: positionsForMarks.length > 0, refetchOnWindowFocus: false },
+  );
+
+  const marksMap = useMemo(() => {
+    const m = new Map<number, { spot: number; mark: number | null; iv: number | null }>();
+    if (marksQuery.data) for (const r of marksQuery.data) m.set(r.id, r);
+    return m;
+  }, [marksQuery.data]);
+
   const events = useMemo(() => generateMarketEvents(), []);
 
   // Portfolio strip for open positions
@@ -60,6 +89,65 @@ export default function CommandCenterPage() {
     const matched = events.filter((e) => e.date >= today && e.date <= expiryStr && e.importance >= 2);
     return { has: matched.length > 0, names: matched.map((e) => e.name) };
   };
+
+  // Sorted open positions by action severity
+  const sortedOpen = useMemo(() => {
+    if (!openPositions.data) return [];
+    return [...openPositions.data].sort((a, b) => {
+      const markA = marksMap.get(a.id);
+      const markB = marksMap.get(b.id);
+      const dteA = Math.max(0, Math.ceil((new Date(a.expiry).getTime() - Date.now()) / 86400000));
+      const dteB = Math.max(0, Math.ceil((new Date(b.expiry).getTime() - Date.now()) / 86400000));
+      const eA = hasEventBeforeExpiry(new Date(a.expiry));
+      const eB = hasEventBeforeExpiry(new Date(b.expiry));
+      const profitA = markA?.mark != null ? (a.entryCredit - markA.mark * 100 * a.contracts) / a.entryCredit : 0;
+      const profitB = markB?.mark != null ? (b.entryCredit - markB.mark * 100 * b.contracts) / b.entryCredit : 0;
+      const sigA = positionActions({ profitPct: profitA, dte: dteA, spot: markA?.spot ?? a.strike * 0.97, strike: a.strike, optionType: a.optionType, hasEventBeforeExpiry: eA.has });
+      const sigB = positionActions({ profitPct: profitB, dte: dteB, spot: markB?.spot ?? b.strike * 0.97, strike: b.strike, optionType: b.optionType, hasEventBeforeExpiry: eB.has });
+      const sevA = Math.min(...sigA.map((s) => SEVERITY_ORDER[s.severity] ?? 3));
+      const sevB = Math.min(...sigB.map((s) => SEVERITY_ORDER[s.severity] ?? 3));
+      return sevA - sevB;
+    });
+  }, [openPositions.data, marksMap]);
+
+  // Closed tab stats
+  const closedStats = useMemo(() => {
+    const closed = closedPositions.data ?? [];
+    const total = closed.length;
+    const wins = closed.filter((p) => (p.realizedPnl ?? 0) > 0).length;
+    const winRate = total > 0 ? (wins / total) * 100 : 0;
+    const totalPnl = closed.reduce((s, p) => s + (p.realizedPnl ?? 0), 0);
+    const avgPnl = total > 0 ? totalPnl / total : 0;
+    return { total, wins, winRate, totalPnl, avgPnl };
+  }, [closedPositions.data]);
+
+  // Calibration data
+  const calibration = useMemo(() => {
+    const closed = closedPositions.data ?? [];
+    const withPwin = closed.filter((p) => p.predictedPwin != null && p.predictedPwin > 0);
+    if (withPwin.length < 30) return { enough: false as const, count: withPwin.length };
+    // Bucket into 5 ranges: 0-20, 20-40, 40-60, 60-80, 80-100
+    const buckets = [
+      { range: "0-20%", min: 0, max: 0.2, trades: 0, wins: 0 },
+      { range: "20-40%", min: 0.2, max: 0.4, trades: 0, wins: 0 },
+      { range: "40-60%", min: 0.4, max: 0.6, trades: 0, wins: 0 },
+      { range: "60-80%", min: 0.6, max: 0.8, trades: 0, wins: 0 },
+      { range: "80-100%", min: 0.8, max: 1.01, trades: 0, wins: 0 },
+    ];
+    for (const p of withPwin) {
+      const pwin = p.predictedPwin!;
+      const won = (p.realizedPnl ?? 0) > 0;
+      for (const b of buckets) {
+        if (pwin >= b.min && pwin < b.max) { b.trades++; if (won) b.wins++; break; }
+      }
+    }
+    const chartData = buckets.filter((b) => b.trades > 0).map((b) => ({
+      range: b.range,
+      predicted: ((b.min + b.max) / 2) * 100,
+      realized: (b.wins / b.trades) * 100,
+    }));
+    return { enough: true as const, count: withPwin.length, chartData };
+  }, [closedPositions.data]);
 
   return (
     <div className="space-y-6">
@@ -94,14 +182,32 @@ export default function CommandCenterPage() {
         <div className="space-y-3">
           {openPositions.isLoading && <div className="flex items-center gap-2 text-sm font-bold text-white/90"><Loader2 className="h-4 w-4 animate-spin" /> Yükleniyor...</div>}
           {openPositions.data?.length === 0 && <p className="py-12 text-center text-sm font-bold text-white/90">Açık pozisyon yok</p>}
-          {openPositions.data?.map((pos) => {
+          {sortedOpen.map((pos) => {
             const dte = Math.max(0, Math.ceil((new Date(pos.expiry).getTime() - Date.now()) / 86400000));
             const eventInfo = hasEventBeforeExpiry(new Date(pos.expiry));
-            // Estimated profit (simplified: without live data, use 50% decay assumption based on DTE)
-            const totalDte = Math.ceil((new Date(pos.expiry).getTime() - new Date(pos.openedAt).getTime()) / 86400000);
-            const elapsed = totalDte - dte;
-            const profitPct = totalDte > 0 ? Math.min(elapsed / totalDte, 0.95) : 0;
-            const signals = positionActions({ profitPct, dte, spot: pos.strike * 0.97, strike: pos.strike, optionType: pos.optionType, hasEventBeforeExpiry: eventInfo.has });
+            const markInfo = marksMap.get(pos.id);
+            const marksLoading = positionsForMarks.length > 0 && marksQuery.isLoading;
+
+            // Real profit calculation
+            let profitPct = 0;
+            let pItm: number | null = null;
+            if (markInfo?.mark != null) {
+              profitPct = (pos.entryCredit - markInfo.mark * 100 * pos.contracts) / pos.entryCredit;
+              if (markInfo.iv != null && markInfo.spot > 0) {
+                const T = dte / 365;
+                const sigma = markInfo.iv / 100;
+                pItm = pos.optionType === "put"
+                  ? probITMPut(markInfo.spot, pos.strike, T, sigma)
+                  : probITMCall(markInfo.spot, pos.strike, T, sigma);
+              }
+            } else if (!marksLoading) {
+              // Fallback: time-decay estimate
+              const totalDte = Math.ceil((new Date(pos.expiry).getTime() - new Date(pos.openedAt).getTime()) / 86400000);
+              const elapsed = totalDte - dte;
+              profitPct = totalDte > 0 ? Math.min(elapsed / totalDte, 0.95) : 0;
+            }
+
+            const signals = positionActions({ profitPct, dte, spot: markInfo?.spot ?? pos.strike * 0.97, strike: pos.strike, optionType: pos.optionType, hasEventBeforeExpiry: eventInfo.has });
 
             return (
               <div key={pos.id} className="rounded-xl border border-white/10 bg-[#0a0a0c] p-4">
@@ -112,13 +218,20 @@ export default function CommandCenterPage() {
                     <span className="text-sm font-bold text-white/90 tabular-nums">{pos.contracts}x</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    {signals.map((s, i) => <ActionBadge key={i} signal={s} />)}
+                    {signals.map((s, i) => (
+                      <span key={i} className="inline-flex items-center gap-1">
+                        <ActionBadge signal={s} />
+                        {s.code !== "HOLD" && <DetayButton content={actionDetail(s.code, { entryCredit: pos.entryCredit, strike: pos.strike, contracts: pos.contracts })} />}
+                      </span>
+                    ))}
                   </div>
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-4 text-xs font-bold tabular-nums">
                   <span className="text-white/90">Kredi: <span className="text-emerald-400">{usd(pos.entryCredit)}</span></span>
                   <span className="text-white/90">Vade: <span className="text-white">{new Date(pos.expiry).toLocaleDateString("tr-TR")}</span></span>
                   <span className="text-white/90">DTE: <span className={cn(dte <= 7 ? "text-red-400" : "text-white")}>{dte}</span></span>
+                  <span className="text-white/90">Kâr: <span className={cn(profitPct >= 0.5 ? "text-emerald-400" : "text-white")}>{marksLoading ? "—" : `${(profitPct * 100).toFixed(0)}%`}</span></span>
+                  {pItm !== null && <span className="text-white/90">P(ITM): <span className="text-white">{(pItm * 100).toFixed(0)}%</span></span>}
                   {pos.predictedPwin && <span className="text-white/90">P(win): <span className="text-white">{(pos.predictedPwin * 100).toFixed(0)}%</span></span>}
                   {eventInfo.names.slice(0, 2).map((n, i) => <EventBadge key={i} name={n} />)}
                 </div>
@@ -146,28 +259,67 @@ export default function CommandCenterPage() {
 
       {/* Closed Positions / Journal */}
       {tab === "closed" && (
-        <div className="space-y-3">
-          {closedPositions.isLoading && <div className="flex items-center gap-2 text-sm font-bold text-white/90"><Loader2 className="h-4 w-4 animate-spin" /> Yükleniyor...</div>}
-          {closedPositions.data?.length === 0 && <p className="py-12 text-center text-sm font-bold text-white/90">Henüz kapatılmış pozisyon yok</p>}
-          {closedPositions.data?.map((pos) => (
-            <div key={pos.id} className="rounded-xl border border-white/10 bg-[#0a0a0c] p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <span className="text-base font-bold text-white">{pos.ticker}</span>
-                  <span className="text-sm font-bold text-white/90">{pos.strategy} · {pos.strike.toFixed(1)} {pos.optionType.toUpperCase()}</span>
-                </div>
-                <span className={cn("text-sm font-bold tabular-nums", (pos.realizedPnl ?? 0) >= 0 ? "text-emerald-400" : "text-red-400")}>
-                  P&L: {usd(pos.realizedPnl ?? 0)}
-                </span>
-              </div>
-              <div className="mt-2 flex flex-wrap gap-4 text-xs font-bold tabular-nums text-white/90">
-                <span>Kredi: <span className="text-emerald-400">{usd(pos.entryCredit)}</span></span>
-                <span>Debit: <span className="text-red-400">{usd(pos.exitDebit ?? 0)}</span></span>
-                <span>Kapanış: {pos.closedAt ? new Date(pos.closedAt).toLocaleDateString("tr-TR") : "—"}</span>
-                {pos.notes && <span className="text-white/90">Not: {pos.notes}</span>}
-              </div>
+        <div className="space-y-4">
+          {/* Summary strip */}
+          <div className="grid grid-cols-2 gap-4 rounded-xl border border-white/10 bg-[#0b0b0c] p-4 sm:grid-cols-4">
+            <div><p className="text-xs font-bold text-white/90">Toplam Trade</p><p className="text-lg font-bold text-white tabular-nums">{closedStats.total}</p></div>
+            <div><p className="text-xs font-bold text-white/90">Kazanma Oranı</p><p className="text-lg font-bold text-emerald-400 tabular-nums">{closedStats.winRate.toFixed(0)}%</p></div>
+            <div><p className="text-xs font-bold text-white/90">Toplam P&L</p><p className={cn("text-lg font-bold tabular-nums", closedStats.totalPnl >= 0 ? "text-emerald-400" : "text-red-400")}>{usd(closedStats.totalPnl)}</p></div>
+            <div><p className="text-xs font-bold text-white/90">Ortalama P&L</p><p className={cn("text-lg font-bold tabular-nums", closedStats.avgPnl >= 0 ? "text-emerald-400" : "text-red-400")}>{usd(closedStats.avgPnl)}</p></div>
+          </div>
+
+          {/* Calibration section */}
+          {!calibration.enough ? (
+            <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm font-bold text-yellow-300">
+              ⚠ Kalibrasyon için yeterli veri yok ({calibration.count}/30 trade ile P(win) tahmini). Daha fazla pozisyon kapatıldığında model doğruluğu ölçülebilecek.
             </div>
-          ))}
+          ) : (
+            <div className="rounded-xl border border-white/10 bg-[#0b0b0c] p-4 space-y-3">
+              <h3 className="text-sm font-bold text-white">📊 Model Kalibrasyonu ({calibration.count} trade)</h3>
+              <ResponsiveContainer width="100%" height={180}>
+                <BarChart data={calibration.chartData} margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
+                  <XAxis dataKey="range" tick={{ fill: "rgba(255,255,255,0.7)", fontSize: 11 }} />
+                  <YAxis domain={[0, 100]} tick={{ fill: "rgba(255,255,255,0.7)", fontSize: 11 }} />
+                  <Tooltip contentStyle={{ background: "#1a1a1e", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8 }} />
+                  <ReferenceLine y={20} stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3" />
+                  <ReferenceLine y={40} stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3" />
+                  <ReferenceLine y={60} stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3" />
+                  <ReferenceLine y={80} stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3" />
+                  <Bar dataKey="predicted" name="Tahmin" fill="#ff7200" opacity={0.4} />
+                  <Bar dataKey="realized" name="Gerçekleşen" fill="#34d399" />
+                </BarChart>
+              </ResponsiveContainer>
+              <p className="text-xs font-bold text-white/90">
+                Turuncu: model tahmini (orta nokta), Yeşil: gerçekleşen kazanma oranı. İkisi yakınsa model kalibre demektir.
+              </p>
+            </div>
+          )}
+
+          {/* Closed positions list */}
+          <div className="space-y-3">
+            {closedPositions.isLoading && <div className="flex items-center gap-2 text-sm font-bold text-white/90"><Loader2 className="h-4 w-4 animate-spin" /> Yükleniyor...</div>}
+            {closedPositions.data?.length === 0 && <p className="py-12 text-center text-sm font-bold text-white/90">Henüz kapatılmış pozisyon yok</p>}
+            {closedPositions.data?.map((pos) => (
+              <div key={pos.id} className="rounded-xl border border-white/10 bg-[#0a0a0c] p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="text-base font-bold text-white">{pos.ticker}</span>
+                    <span className="text-sm font-bold text-white/90">{pos.strategy} · {pos.strike.toFixed(1)} {pos.optionType.toUpperCase()}</span>
+                  </div>
+                  <span className={cn("text-sm font-bold tabular-nums", (pos.realizedPnl ?? 0) >= 0 ? "text-emerald-400" : "text-red-400")}>
+                    P&L: {usd(pos.realizedPnl ?? 0)}
+                  </span>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-4 text-xs font-bold tabular-nums text-white/90">
+                  <span>Kredi: <span className="text-emerald-400">{usd(pos.entryCredit)}</span></span>
+                  <span>Debit: <span className="text-red-400">{usd(pos.exitDebit ?? 0)}</span></span>
+                  <span>Kapanış: {pos.closedAt ? new Date(pos.closedAt).toLocaleDateString("tr-TR") : "—"}</span>
+                  {pos.predictedPwin && <span>P(win): {(pos.predictedPwin * 100).toFixed(0)}%</span>}
+                  {pos.notes && <span className="text-white/90">Not: {pos.notes}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

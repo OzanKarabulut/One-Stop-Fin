@@ -4,11 +4,13 @@ import { useState, useMemo, useCallback } from "react";
 import { trpc } from "@/lib/trpc/client";
 import { useScanState } from "@/hooks/useScanState";
 import { cn } from "@/lib/utils";
-import { TrendingUp, Loader2, AlertTriangle, Activity } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
+import { TrendingUp, Loader2, AlertTriangle, Activity, Pencil } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Cell } from "recharts";
 import type { GateVerdict } from "@/lib/sell-gate";
+import { DetayButton } from "@/components/ui/DetailPanel";
+import { gateDetail, gexDetail } from "@/lib/detail-content";
 
-const DEFAULT_VOL_LIST = "TSLA,NVDA,AMD,COIN,MSTR,PLTR,MARA,RIOT,SPY,QQQ,IWM,AAPL,META,GOOGL,MSFT,AMZN";
+const DEFAULT_CSP_LIST = "NASA,RKLB,DRAM,MRVL,NNE,AMBA,CBRS,OSCR,EOSE,BMNR,IREN,CLS,MU,CRDO,SNDK,AAOI,PENG,GLW";
 
 function GateBadge({ gate }: { gate: GateVerdict }) {
   const colors: Record<string, string> = {
@@ -27,7 +29,7 @@ export default function VolConsolePage() {
   const {
     mode, setMode, list, setList, customTickers, setCustomTickers,
     editingList, setEditingList, scanWatchlist, scanTickers,
-  } = useScanState({ prefix: "vol", defaultList: DEFAULT_VOL_LIST, defaultBudget: 0 });
+  } = useScanState({ prefix: "csp", defaultList: DEFAULT_CSP_LIST, defaultBudget: 0 });
   const [dte, setDte] = useState(30);
   const [scanning, setScanning] = useState(false);
 
@@ -61,12 +63,15 @@ export default function VolConsolePage() {
                   {m === "mylist" ? "Listem" : m === "all" ? "Tümü" : "Özel"}
                 </button>
               ))}
+              <button onClick={() => setEditingList((v) => !v)} title="Listeyi düzenle" className="rounded-md p-2 text-white/90 hover:bg-white/10 hover:text-white">
+                <Pencil className="h-4 w-4" />
+              </button>
             </div>
           </div>
 
           {editingList && (
             <div className="w-full space-y-1.5">
-              <label className={labelClass}>Vol Listem (virgülle)</label>
+              <label className={labelClass}>Listem (virgülle)</label>
               <textarea value={list} onChange={(e) => setList(e.target.value.toUpperCase())} rows={2} className={cn(inputClass, "w-full")} />
             </div>
           )}
@@ -117,7 +122,12 @@ export default function VolConsolePage() {
                   <span className="text-white/90">Term <span className={cn(r.termContango ? "text-emerald-400" : "text-red-400")}>{r.termContango === null ? "—" : r.termContango ? "Contango" : "Backw."}</span></span>
                   <span className="text-white/90">Skew25 <span className="text-white">{r.skew25 !== null ? r.skew25.toFixed(1) : "—"}</span></span>
                   <span className="text-white/90">IV%ile <span className="text-white">{r.ivPercentile !== null ? r.ivPercentile.toFixed(0) : "—"}</span></span>
-                  {r.gate && <GateBadge gate={r.gate} />}
+                  {r.gate && (
+                    <>
+                      <GateBadge gate={r.gate} />
+                      <DetayButton content={gateDetail({ ticker: r.ticker, verdict: r.gate, vrp: r.vrp, atmIvFront: r.atmIvFront, hv20: r.hv20, termContango: r.termContango, ivPercentile: r.ivPercentile, earningsInWindow: r.earningsInWindow })} />
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -127,30 +137,42 @@ export default function VolConsolePage() {
                   <div className="flex items-center gap-2 mb-2">
                     <Activity className="h-4 w-4 text-[#ff7200]" />
                     <span className="text-xs font-bold text-white/90">GEX Profili</span>
+                    <DetayButton content={gexDetail()} />
                     {r.gex.callWall && <span className="text-xs font-bold text-emerald-400">Call Wall: ${r.gex.callWall.toFixed(0)}</span>}
                     {r.gex.putWall && <span className="text-xs font-bold text-red-400">Put Wall: ${r.gex.putWall.toFixed(0)}</span>}
                     {r.gex.flip && <span className="text-xs font-bold text-yellow-400">Flip: ${r.gex.flip.toFixed(0)}</span>}
                   </div>
                   <ResponsiveContainer width="100%" height={120}>
                     <BarChart data={r.gex.levels} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
-                      <XAxis dataKey="strike" tick={{ fill: "rgba(255,255,255,0.6)", fontSize: 10 }} tickFormatter={(v: number) => v.toFixed(0)} />
+                      <XAxis dataKey="strike" type="number" domain={["dataMin", "dataMax"]} tick={{ fill: "rgba(255,255,255,0.6)", fontSize: 10 }} tickFormatter={(v: number) => v.toFixed(0)} />
                       <YAxis tick={{ fill: "rgba(255,255,255,0.6)", fontSize: 10 }} width={40} />
                       <Tooltip contentStyle={{ background: "#1a1a1e", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8 }} labelStyle={{ color: "#fff", fontWeight: 700 }} />
                       <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" />
-                      <Bar dataKey="netGex" fill="#ff7200" />
+                      {r.spot > 0 && <ReferenceLine x={r.spot} stroke="#ffffff" strokeDasharray="3 3" label={{ value: "Spot", fill: "#fff", fontSize: 9 }} />}
+                      {r.gex.flip && <ReferenceLine x={r.gex.flip} stroke="#eab308" strokeDasharray="3 3" label={{ value: "Flip", fill: "#eab308", fontSize: 9 }} />}
+                      {r.gex.callWall && <ReferenceLine x={r.gex.callWall} stroke="#34d399" strokeDasharray="3 3" label={{ value: "CW", fill: "#34d399", fontSize: 9 }} />}
+                      {r.gex.putWall && <ReferenceLine x={r.gex.putWall} stroke="#f87171" strokeDasharray="3 3" label={{ value: "PW", fill: "#f87171", fontSize: 9 }} />}
+                      <Bar dataKey="netGex">
+                        {r.gex.levels.map((entry, idx) => (
+                          <Cell key={idx} fill={entry.netGex >= 0 ? "#34d399" : "#f87171"} />
+                        ))}
+                      </Bar>
                     </BarChart>
                   </ResponsiveContainer>
+                  {r.gex.putWall && (
+                    <p className="mt-2 text-xs font-bold text-white">Önerilen CSP bölgesi: &lt; ${r.gex.putWall.toFixed(0)} (put wall altı)</p>
+                  )}
                 </div>
               )}
 
               {/* Bottom: gate reasons + CSP bridge */}
               <div className="flex items-center justify-between border-t border-white/[0.06] px-5 py-2.5">
-                <div className="text-xs font-bold text-white/90">
+                <div className="flex items-center gap-2 text-xs font-bold text-white/90">
                   {r.gate?.reasons.map((reason, i) => <span key={i} className="mr-3">{reason}</span>)}
                 </div>
-                {r.gate?.color === "green" && (
-                  <a href={`/dashboard/signallab/csp-screener`}
-                    className="rounded-md bg-[#ff7200]/15 px-3 py-1 text-xs font-bold text-[#ff7200] hover:bg-[#ff7200]/25 transition-colors">
+                {r.gate && (r.gate.color === "green" || r.gate.color === "yellow") && (
+                  <a href={`/dashboard/signallab/csp-screener?ticker=${r.ticker}${r.gex?.putWall ? `&maxStrike=${r.gex.putWall.toFixed(0)}` : ""}`}
+                    className="rounded-md bg-[#ff7200] px-3 py-1 text-xs font-bold text-white hover:bg-[#ff8c3a] transition-colors">
                     CSP Tara →
                   </a>
                 )}
