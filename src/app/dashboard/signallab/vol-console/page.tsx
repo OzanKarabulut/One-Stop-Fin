@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { trpc } from "@/lib/trpc/client";
 import { useScanState } from "@/hooks/useScanState";
 import { cn } from "@/lib/utils";
@@ -116,6 +117,15 @@ function GexChartCard({ r }: { r: VolResult }) {
 }
 
 export default function VolConsolePage() {
+  return (
+    <Suspense fallback={<div className="py-12 text-center text-sm font-bold text-white/40">Yükleniyor…</div>}>
+      <VolConsoleInner />
+    </Suspense>
+  );
+}
+
+function VolConsoleInner() {
+  const searchParams = useSearchParams();
   const {
     mode, setMode, list, setList, customTickers, setCustomTickers,
     editingList, setEditingList, scanWatchlist, scanTickers,
@@ -124,6 +134,11 @@ export default function VolConsolePage() {
   const [scanning, setScanning] = useState(false);
   const [openDetails, setOpenDetails] = useState<Record<string, boolean>>({});
   const toggleDetail = useCallback((t: string) => setOpenDetails(prev => ({ ...prev, [t]: !prev[t] })), []);
+
+  useEffect(() => {
+    const dteParam = searchParams.get("dte");
+    if (dteParam) setDte(Number(dteParam) || 30);
+  }, [searchParams]);
 
   const scanInput = useMemo(
     () => ({ watchlist: scanWatchlist, customTickers: scanTickers, dte }),
