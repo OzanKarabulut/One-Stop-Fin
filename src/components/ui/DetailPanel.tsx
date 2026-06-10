@@ -13,7 +13,7 @@ export function DetayButton({ content }: { content: DetailContent }) {
   return (
     <>
       <button onClick={() => setOpen(!open)}
-        className="bg-[#ff7200] text-white font-bold rounded px-2 py-1 text-xs hover:bg-[#ff8a2b] transition-colors">
+        className="bg-[#ff7200] text-white font-bold rounded-lg px-4 py-2 text-sm hover:bg-[#ff8a2b] transition-colors">
         Detay {open ? "▾" : "▸"}
       </button>
       {open && <DetailPanel content={content} />}

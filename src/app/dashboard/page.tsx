@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { generateMarketEvents, groupUpcoming, type MarketEvent, type EventCategory } from "@/lib/market-calendar";
 import { EVENT_KNOWLEDGE } from "@/lib/event-knowledge";
 import { sellClimate } from "@/lib/sell-climate";
-import { DetayButton } from "@/components/ui/DetailPanel";
+import { DetayButton, DetailPanel } from "@/components/ui/DetailPanel";
 
 const TREASURY_LABEL: Record<string, string> = { "^IRX": "US 3 Ay", "^FVX": "US 5Y", "^TNX": "US 10Y", "^TYX": "US 30Y" };
 const FUTURES_LABEL: Record<string, string> = { "ES=F": "S&P Futures", "NQ=F": "Nasdaq Futures" };
@@ -150,6 +150,7 @@ function CalendarSection({ title, events, openKey, setOpenKey, router }: {
 export default function HomePage() {
   const [mounted, setMounted] = useState(false);
   const [openKey, setOpenKey] = useState<string | null>(null);
+  const [climateOpen, setClimateOpen] = useState(false);
   const router = useRouter();
   useEffect(() => setMounted(true), []);
 
@@ -175,17 +176,29 @@ export default function HomePage() {
         const climateColors = climate.climate === "favorable" ? "bg-emerald-500/20 text-emerald-400" :
           climate.climate === "poor" ? "bg-red-500/20 text-red-400" :
           "bg-yellow-500/20 text-yellow-400";
+        const climateContent = { title: "Prim Satış İklimi", logic: climate.reasons.join("\n"), scenarios: [] as { durum: string; sonuc: string; renk: "green" | "red" | "yellow" }[], glossary: [
+          { term: "VIX", def: "S&P 500 opsiyon volatilitesi endeksi — yüksekse prim zengin ama risk de yüksek" },
+          { term: "Fear & Greed", def: "CNN piyasa duyarlılık endeksi — düşükse korku (IV şişkin), yüksekse açgözlülük (IV ince)" },
+          { term: "IV Crush", def: "Olay sonrası implied volatility'nin çökmesi — prim satıcısının ana kâr kaynağı" },
+        ]};
         return (
-          <div className="mb-4 rounded-xl border border-white/10 bg-[#0b0b0c] p-4 flex items-center gap-4">
-            <span className={`rounded-lg px-4 py-2 text-base font-bold ${climateColors}`}>
-              Prim Satış İklimi: {climate.label}
-            </span>
-            <DetayButton content={{ title: "Prim Satış İklimi", logic: climate.reasons.join("\n"), scenarios: [], glossary: [
-              { term: "VIX", def: "S&P 500 opsiyon volatilitesi endeksi — yüksekse prim zengin ama risk de yüksek" },
-              { term: "Fear & Greed", def: "CNN piyasa duyarlılık endeksi — düşükse korku (IV şişkin), yüksekse açgözlülük (IV ince)" },
-              { term: "IV Crush", def: "Olay sonrası implied volatility'nin çökmesi — prim satıcısının ana kâr kaynağı" },
-            ]}} />
-            {climate.reasons[0] && <span className="text-sm font-bold text-white/90 ml-auto">{climate.reasons[0]}</span>}
+          <div className="mb-4 rounded-xl border border-white/10 bg-[#0b0b0c] p-4">
+            <div className="flex items-center gap-4">
+              <span className={`rounded-lg px-4 py-2 text-base font-bold ${climateColors}`}>
+                Prim Satış İklimi: {climate.label}
+              </span>
+              <button onClick={() => setClimateOpen(!climateOpen)}
+                className={cn("rounded-lg px-4 py-2 text-sm font-bold transition-colors",
+                  climateOpen ? "bg-[#ff7200]/20 text-[#ff7200] border border-[#ff7200]/40" : "bg-[#ff7200] text-white hover:bg-[#ff8a2b]")}>
+                Detay {climateOpen ? "▾" : "▸"}
+              </button>
+              {climate.reasons[0] && <span className="text-sm font-bold text-white/90 ml-auto">{climate.reasons[0]}</span>}
+            </div>
+            {climateOpen && (
+              <div className="mt-3">
+                <DetailPanel content={climateContent} />
+              </div>
+            )}
           </div>
         );
       })()}
@@ -238,11 +251,11 @@ export default function HomePage() {
 
       <div className="rounded-xl border border-[#ff7200]/30 bg-[#0a0a0c] p-4">
         <div className="mb-3.5 flex items-center justify-between">
-          <div className="text-[15px] font-bold text-white">📅 Ekonomik &amp; Mekanik Takvim — Risk Haritası</div>
-          <div className="flex items-center gap-3.5 text-[11px] font-bold text-white/70">
-            {([["düşük", 1], ["orta", 2], ["yüksek", 3]] as const).map(([lbl, lv]) => (
-              <span key={lbl} className="inline-flex items-center gap-1.5"><SignalBars level={lv} />{lbl}</span>
-            ))}
+          <div className="text-xl font-bold text-white">📅 Ekonomik &amp; Mekanik Takvim — Risk Haritası</div>
+          <div className="flex items-center gap-4 text-xs font-bold">
+            <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />düşük</span>
+            <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-yellow-400" />orta</span>
+            <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-400" />yüksek</span>
           </div>
         </div>
 
