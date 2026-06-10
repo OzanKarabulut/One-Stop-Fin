@@ -57,7 +57,7 @@ export function computeGexProfile(spot: number, T: number, contracts: GexContrac
   let maxPos = 0;
   let maxNeg = 0;
   for (const lvl of levels) {
-    if (lvl.netGex > maxPos) { maxPos = lvl.netGex; callWall = lvl.strike; }
+    if (lvl.strike > spot && lvl.netGex > maxPos) { maxPos = lvl.netGex; callWall = lvl.strike; }
     if (lvl.strike < spot && lvl.netGex < maxNeg) { maxNeg = lvl.netGex; putWall = lvl.strike; }
   }
 

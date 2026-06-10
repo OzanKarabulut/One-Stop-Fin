@@ -116,13 +116,15 @@ export default function VolConsolePage() {
                 <div className="flex flex-wrap items-center gap-3 text-xs font-bold tabular-nums">
                   <span className="text-white/90">HV20 <span className="text-white">{r.hv20 !== null ? (r.hv20 * 100).toFixed(1) + "%" : "—"}</span></span>
                   <span className="text-white/90">HV60 <span className="text-white">{r.hv60 !== null ? (r.hv60 * 100).toFixed(1) + "%" : "—"}</span></span>
-                  <span className="text-white/90">IV(F) <span className="text-yellow-400">{r.atmIvFront !== null ? r.atmIvFront.toFixed(1) + "%" : "—"}</span></span>
+                  <span className="text-white/90">IV(F) {r.atmIvFront !== null ? <span className="text-yellow-400">{r.atmIvFront.toFixed(1) + "%"}</span> : <span className="text-white/50">veri yok</span>}</span>
                   <span className="text-white/90">IV(B) <span className="text-white">{r.atmIvBack !== null ? r.atmIvBack.toFixed(1) + "%" : "—"}</span></span>
                   <span className="text-white/90">VRP <span className={cn(r.vrp !== null && r.vrp >= 0.03 ? "text-emerald-400" : r.vrp !== null && r.vrp < -0.02 ? "text-red-400" : "text-white")}>{r.vrp !== null ? (r.vrp * 100).toFixed(1) : "—"}</span></span>
                   <span className="text-white/90">Term <span className={cn(r.termContango ? "text-emerald-400" : "text-red-400")}>{r.termContango === null ? "—" : r.termContango ? "Contango" : "Backw."}</span></span>
                   <span className="text-white/90">Skew25 <span className="text-white">{r.skew25 !== null ? r.skew25.toFixed(1) : "—"}</span></span>
                   <span className="text-white/90">IV%ile <span className="text-white">{r.ivPercentile !== null ? r.ivPercentile.toFixed(0) : "—"}</span></span>
-                  {r.gate && (
+                  {r.atmIvFront === null ? (
+                    <span className="rounded-md bg-white/10 px-2.5 py-1 text-xs font-bold text-white/70">VERİ YOK</span>
+                  ) : r.gate && (
                     <>
                       <GateBadge gate={r.gate} />
                       <DetayButton content={gateDetail({ ticker: r.ticker, verdict: r.gate, vrp: r.vrp, atmIvFront: r.atmIvFront, hv20: r.hv20, termContango: r.termContango, ivPercentile: r.ivPercentile, earningsInWindow: r.earningsInWindow })} />
@@ -132,7 +134,11 @@ export default function VolConsolePage() {
               </div>
 
               {/* Middle: GEX chart */}
-              {r.gex && r.gex.levels.length > 0 && (
+              {r.gexSkipReason || !r.gex || r.gex.levels.length === 0 ? (
+                <div className="px-5 py-3">
+                  <div className="text-xs font-bold text-white/50">GEX: {r.gexSkipReason ?? "veri yetersiz"}</div>
+                </div>
+              ) : (
                 <div className="px-5 py-3">
                   <div className="flex items-center gap-2 mb-2">
                     <Activity className="h-4 w-4 text-[#ff7200]" />

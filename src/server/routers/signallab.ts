@@ -503,8 +503,24 @@ export const signallabRouter = router({
       const { computeGexProfile } = await import("@/lib/gex");
       const { sellGate } = await import("@/lib/sell-gate");
 
-      const ivPct = (raw: number | null | undefined): number | null =>
-        raw == null || raw <= 0 ? null : raw <= 3 ? raw * 100 : raw;
+      const isValidOpt = (o: { bid: number; ask: number; iv: number; oi: number }) =>
+        o.bid > 0 && o.ask > 0 && o.iv > 3 && o.iv < 500;
+
+      const median = (xs: number[]): number | null => {
+        if (xs.length === 0) return null;
+        const s = [...xs].sort((a, b) => a - b);
+        const m = Math.floor(s.length / 2);
+        return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+      };
+
+      const atmIv = (opts: Array<{ strike: number; bid: number; ask: number; iv: number; oi: number }>, spot: number): number | null => {
+        for (const band of [0.05, 0.12]) {
+          const ivs = opts.filter(o => isValidOpt(o) && Math.abs(o.strike - spot) <= spot * band).map(o => o.iv);
+          const m = median(ivs);
+          if (m !== null) return m;
+        }
+        return null;
+      };
 
       const results = await Promise.all(tickers.map(async (ticker) => {
         try {
@@ -536,46 +552,46 @@ export const signallabRouter = router({
           const backTs = expiryInfo.expirationTimestamps[backExpiry ?? ""];
           const backChain = backExpiry && backExpiry !== frontExpiry ? await marketData.getChain(ticker, backExpiry, backTs) : null;
 
-          // ATM IV from front
-          const allFrontOpts = [...(frontChain?.puts ?? []), ...(frontChain?.calls ?? [])];
-          const atmOpt = allFrontOpts.reduce((best, cur) =>
-            Math.abs(cur.strike - spot) < Math.abs((best?.strike ?? 9999) - spot) ? cur : best, allFrontOpts[0]);
-          const atmIvFront = ivPct(atmOpt?.iv);
-
-          // ATM IV from back
-          const allBackOpts = [...(backChain?.puts ?? []), ...(backChain?.calls ?? [])];
-          const atmBack = allBackOpts.reduce((best, cur) =>
-            Math.abs(cur.strike - spot) < Math.abs((best?.strike ?? 9999) - spot) ? cur : best, allBackOpts[0]);
-          const atmIvBack = ivPct(atmBack?.iv);
+          // ATM IV — robust median-based
+          const atmIvFront = frontChain ? atmIv([...frontChain.calls, ...frontChain.puts], spot) : null;
+          const atmIvBack = backChain ? atmIv([...backChain.calls, ...backChain.puts], spot) : null;
 
           // VRP = ATM IV - HV20
-          const vrp = atmIvFront !== null && hv20 !== null ? (atmIvFront / 100) - hv20 : null;
+          const vrp = atmIvFront !== null && hv20 !== null ? atmIvFront / 100 - hv20 : null;
           // Term contango = front IV < back IV (normal term structure)
           const termContango = atmIvFront !== null && atmIvBack !== null ? atmIvFront < atmIvBack : null;
 
           // Skew25: 25-delta put IV vs ATM IV
           const puts25 = (frontChain?.puts ?? []).filter((p) => {
             const moneyness = (spot - p.strike) / spot;
-            return moneyness > 0.03 && moneyness < 0.12 && p.iv > 0;
+            return moneyness > 0.03 && moneyness < 0.12 && isValidOpt(p);
           });
           const skew25 = puts25.length > 0 && atmIvFront
-            ? (puts25.reduce((s, p) => s + (ivPct(p.iv) ?? 0), 0) / puts25.length) - atmIvFront
+            ? (puts25.reduce((s, p) => s + p.iv, 0) / puts25.length) - atmIvFront
             : null;
 
-          // GEX
-          const gexContracts = allFrontOpts.map((o) => ({
-            strike: o.strike,
-            type: (frontChain?.calls ?? []).includes(o) ? "call" as const : "put" as const,
-            openInterest: o.oi,
-            iv: (ivPct(o.iv) ?? 30) / 100,
-          }));
-          const gex = spot > 0 ? computeGexProfile(spot, T, gexContracts) : null;
+          // GEX — liquidity gate
+          const allFrontOpts = [...(frontChain?.calls ?? []), ...(frontChain?.puts ?? [])];
+          const liquid = allFrontOpts.filter(o => o.oi > 0);
+          let gex: Awaited<ReturnType<typeof computeGexProfile>> | null = null;
+          let gexSkipReason: string | null = null;
+          if (liquid.length < 10 || liquid.reduce((s, o) => s + o.oi, 0) < 500) {
+            gexSkipReason = "Opsiyon likiditesi yetersiz (OI verisi az)";
+          } else {
+            const gexContracts = allFrontOpts.map((o) => ({
+              strike: o.strike,
+              type: (frontChain?.calls ?? []).includes(o) ? "call" as const : "put" as const,
+              openInterest: o.oi,
+              iv: (isValidOpt(o) ? o.iv : (atmIvFront ?? 30)) / 100,
+            }));
+            gex = spot > 0 ? computeGexProfile(spot, T, gexContracts) : null;
+          }
 
           // GEX levels: windowed ±25% around spot
-          let gexLevels: typeof gex extends null ? never : NonNullable<typeof gex>["levels"] = [];
+          let gexLevels: NonNullable<typeof gex>["levels"] = [];
           if (gex) {
             const windowed = gex.levels.filter(l => l.strike >= spot * 0.75 && l.strike <= spot * 1.25);
-            gexLevels = windowed.length >= 8 ? windowed : gex.levels.sort((a, b) => Math.abs(a.strike - spot) - Math.abs(b.strike - spot)).slice(0, 20).sort((a, b) => a.strike - b.strike);
+            gexLevels = windowed.length >= 8 ? windowed : [...gex.levels].sort((a, b) => Math.abs(a.strike - spot) - Math.abs(b.strike - spot)).slice(0, 20).sort((a, b) => a.strike - b.strike);
           }
 
           // Fire-and-forget vol snapshot upsert
@@ -603,13 +619,14 @@ export const signallabRouter = router({
           return {
             ticker, spot, hv20, hv60, atmIvFront, atmIvBack, vrp, termContango, skew25,
             gex: gex ? { levels: gexLevels, flip: gex.flip, callWall: gex.callWall, putWall: gex.putWall, totalNetGex: gex.totalNetGex } : null,
+            gexSkipReason,
             ivPercentile: ivData.ivRank,
             earningsInWindow,
             gate,
             error: null,
           };
         } catch (err) {
-          return { ticker, spot: 0, hv20: null, hv60: null, atmIvFront: null, atmIvBack: null, vrp: null, termContango: null, skew25: null, gex: null, ivPercentile: null, earningsInWindow: null, gate: null, error: err instanceof Error ? err.message : "Hata" };
+          return { ticker, spot: 0, hv20: null, hv60: null, atmIvFront: null, atmIvBack: null, vrp: null, termContango: null, skew25: null, gex: null, gexSkipReason: null as string | null, ivPercentile: null, earningsInWindow: null, gate: null, error: err instanceof Error ? err.message : "Hata" };
         }
       }));
 
