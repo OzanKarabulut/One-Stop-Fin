@@ -27,7 +27,8 @@
       "commandCenter": "Komuta Merkezi",
       "market": "Piyasa",
       "watchlist": "İzleme Listesi",
-      "forecast": "Tahmin Merkezi"
+      "forecast": "Tahmin Merkezi",
+      "anomalyRadar": "Anomali Radarı"
     },
     "newssumy": "NewsSumy",
     "edusumy": "EduSumy",

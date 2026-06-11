@@ -1206,4 +1206,304 @@ export const signallabRouter = router({
         pinCandidates,
       };
     }),
+
+  // ═══ Anomali Radarı: anomalyScan ═══════════════════════════════════════════
+  anomalyScan: publicProcedure
+    .input(z.object({ tickers: z.array(z.string()).max(300) }))
+    .query(async ({ input }) => {
+      const { getSparkCloses } = await import("../services/market-data/yahoo");
+      const { sectorEtfFor, SECTOR_ETF } = await import("@/lib/ticker-universe");
+      const { historicalVol, probITMPut } = await import("@/lib/vol-math");
+      const { computeGexProfile } = await import("@/lib/gex");
+
+      const DROP_1D = 0.07;
+      const DROP_3D = 0.12;
+      const today = new Date(new Date().toISOString().slice(0, 10));
+      const stage1Start = Date.now();
+
+      // Collect all sector ETFs needed
+      const etfSet = new Set(Object.values(SECTOR_ETF));
+      etfSet.add("SPY");
+      const allSymbols = [...new Set([...input.tickers, ...etfSet])];
+
+      // Stage 1: batch spark closes
+      const sparkData = await getSparkCloses(allSymbols);
+
+      // Compute ETF drops for sector-relative
+      const etfDrop1d = new Map<string, number>();
+      for (const etf of etfSet) {
+        const closes = sparkData.get(etf);
+        if (closes && closes.length >= 2) {
+          etfDrop1d.set(etf, closes[closes.length - 1] / closes[closes.length - 2] - 1);
+        }
+      }
+
+      // Stage 1 filter
+      interface Triggered { ticker: string; drop1d: number; drop3d: number; spot: number; }
+      const triggered: Triggered[] = [];
+      for (const ticker of input.tickers) {
+        const closes = sparkData.get(ticker);
+        if (!closes || closes.length < 4) continue;
+        const spot = closes[closes.length - 1];
+        const drop1d = spot / closes[closes.length - 2] - 1;
+        const drop3d = spot / closes[closes.length - 4] - 1;
+        if (drop1d <= -DROP_1D || drop3d <= -DROP_3D) {
+          triggered.push({ ticker, drop1d, drop3d, spot });
+        }
+      }
+
+      const stage1Ms = Date.now() - stage1Start;
+
+      // Stage 2: deep analysis (semaphore 4)
+      const sem = { running: 0, queue: [] as Array<() => void> };
+      function acquire(): Promise<void> {
+        if (sem.running < 4) { sem.running++; return Promise.resolve(); }
+        return new Promise<void>(r => sem.queue.push(r));
+      }
+      function release() { sem.running--; const next = sem.queue.shift(); if (next) { sem.running++; next(); } }
+
+      interface AnomalyCard {
+        ticker: string; spot: number; drop1d: number; drop3d: number;
+        hv20: number; sigmaMove: number; sectorRel: number; sectorLabel: string;
+        ivPct: number; ivHvRatio: number; ivPercentile: number | null; ivPercentilePrev: number | null;
+        earningsInWin: boolean | null;
+        putWall: number | null;
+        expiry: string; dte: number;
+        conservative: StrikeSuggestion | null; aggressive: StrikeSuggestion | null;
+        opportunityScore: number;
+      }
+      interface StrikeSuggestion {
+        strike: number; premium: number; totalCredit: number;
+        annualizedYieldPct: number; pAssign: number; buffer: number;
+        effectiveCost: number; effectiveCostVsSpotPct: number; oi: number;
+      }
+
+      const cards: AnomalyCard[] = [];
+
+      await Promise.all(triggered.map(async (t) => {
+        await acquire();
+        try {
+          // 6-month closes for HV
+          const chartJson = await yahoo.fetchJSON(`https://query2.finance.yahoo.com/v8/finance/chart/${t.ticker}?interval=1d&range=6mo`) as {
+            chart?: { result?: Array<{ indicators?: { quote?: Array<{ close?: (number | null)[] }> } }> };
+          };
+          const closes = (chartJson?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? []).filter((c): c is number => c != null);
+          const hv20 = historicalVol(closes, 20);
+          if (!hv20 || hv20 <= 0) return;
+
+          const sigmaMove = Math.abs(t.drop1d) / (hv20 / Math.sqrt(252));
+          const sectorEtf = sectorEtfFor(t.ticker);
+          const sectorDrop = etfDrop1d.get(sectorEtf) ?? 0;
+          const sectorRel = t.drop1d - sectorDrop;
+          const sectorLabel = sectorRel <= -0.04 ? "şirket-ağırlıklı" : "sektörle birlikte";
+
+          // Expiry: nearest with DTE in [5,15], fallback nearest ≥5
+          const expiryInfo = await marketData.getExpirations(t.ticker);
+          const now = Date.now();
+          let bestExpiry: string | null = null;
+          for (const exp of expiryInfo.expirations) {
+            const dte = Math.ceil((new Date(exp + "T00:00:00Z").getTime() - now) / 86400000);
+            if (dte >= 5 && dte <= 15) { bestExpiry = exp; break; }
+          }
+          if (!bestExpiry) {
+            for (const exp of expiryInfo.expirations) {
+              const dte = Math.ceil((new Date(exp + "T00:00:00Z").getTime() - now) / 86400000);
+              if (dte >= 5) { bestExpiry = exp; break; }
+            }
+          }
+          if (!bestExpiry) return;
+          const dte = Math.ceil((new Date(bestExpiry + "T00:00:00Z").getTime() - now) / 86400000);
+          const T = dte / 365;
+
+          // Chain + bisection ATM IV
+          const chain = await marketData.getChain(t.ticker, bestExpiry, expiryInfo.expirationTimestamps?.[bestExpiry]);
+          const spot = chain.price || t.spot;
+
+          // ATM IV (median band)
+          const solveIv = (o: { strike: number; last: number; iv: number }, isCall: boolean): number | null => {
+            if (o.last > 0 && T > 0) {
+              const bs = impliedVolBisection(o.last, spot, o.strike, T, CSP_RISK_FREE_RATE, isCall);
+              if (bs !== null && bs > 0.03 && bs < 5) return bs * 100;
+            }
+            return o.iv > 3 && o.iv < 500 ? o.iv : null;
+          };
+          let ivPct = 0;
+          for (const band of [0.05, 0.12]) {
+            const ivs: number[] = [];
+            for (const c of chain.calls) if (Math.abs(c.strike - spot) <= spot * band) { const v = solveIv(c, true); if (v) ivs.push(v); }
+            for (const p of chain.puts) if (Math.abs(p.strike - spot) <= spot * band) { const v = solveIv(p, false); if (v) ivs.push(v); }
+            if (ivs.length >= 2) { ivs.sort((a, b) => a - b); ivPct = ivs[Math.floor(ivs.length / 2)]; break; }
+          }
+          if (!ivPct) return;
+
+          const ivHvRatio = (ivPct / 100) / hv20;
+
+          // Vol snapshot upsert
+          try {
+            void db.volSnapshot.upsert({
+              where: { ticker_date: { ticker: t.ticker, date: today } },
+              create: { ticker: t.ticker, date: today, atmIv: ivPct, hv20 },
+              update: { atmIv: ivPct, hv20 },
+            });
+          } catch { /* never break */ }
+
+          // IV percentile from history
+          let ivPercentile: number | null = null;
+          let ivPercentilePrev: number | null = null;
+          try {
+            const snaps = await db.volSnapshot.findMany({ where: { ticker: t.ticker }, orderBy: { date: "desc" }, take: 60 });
+            if (snaps.length >= 20) {
+              const ivs = snaps.map(s => s.atmIv).sort((a, b) => a - b);
+              ivPercentile = Math.round((ivs.filter(v => v <= ivPct).length / ivs.length) * 100);
+              if (snaps.length >= 2) {
+                const prevIv = snaps[1].atmIv;
+                ivPercentilePrev = Math.round((ivs.filter(v => v <= prevIv).length / ivs.length) * 100);
+              }
+            }
+          } catch { /* ok */ }
+
+          // Earnings
+          const earningsInWin = await earningsInWindow(t.ticker, bestExpiry);
+
+          // GEX for putWall
+          let putWall: number | null = null;
+          try {
+            const cboeChain = await getCboeChain(t.ticker);
+            if (cboeChain) {
+              const gexContracts: GexContractInput[] = [];
+              for (const o of cboeChain.options) {
+                if (o.expiry !== bestExpiry || o.oi <= 0) continue;
+                gexContracts.push({ strike: o.strike, type: o.type, openInterest: o.oi, iv: o.iv });
+              }
+              if (gexContracts.length > 0) putWall = computeGexProfile(spot, T, gexContracts).putWall;
+            }
+          } catch { /* cboe may fail */ }
+
+          // Strike suggestions (last-first clamp pricing)
+          const puts = chain.puts.filter(p => p.strike < spot);
+          function pickStrike(maxStrike: number): StrikeSuggestion | null {
+            const candidates = puts.filter(p => p.strike <= maxStrike).sort((a, b) => b.strike - a.strike);
+            if (candidates.length === 0) return null;
+            const p = candidates[0];
+            const premium = p.bid > 0 ? p.bid : p.last > 0 ? p.last : 0;
+            if (premium <= 0) return null;
+            const pAssign = probITMPut(spot, p.strike, T, ivPct / 100);
+            return {
+              strike: p.strike, premium, totalCredit: premium * 100,
+              annualizedYieldPct: (premium / p.strike) * (365 / dte) * 100,
+              pAssign: Math.round(pAssign * 10000) / 100,
+              buffer: (spot - p.strike) / spot,
+              effectiveCost: p.strike - premium,
+              effectiveCostVsSpotPct: (spot - (p.strike - premium)) / spot,
+              oi: p.oi,
+            };
+          }
+
+          const conservativeMax = Math.min(putWall ?? spot * 0.88, spot * 0.88);
+          const conservative = pickStrike(conservativeMax);
+
+          // Aggressive: closest to spot*0.91
+          const aggressiveTarget = spot * 0.91;
+          const aggressiveCandidates = puts.filter(p => p.strike <= aggressiveTarget).sort((a, b) => Math.abs(a.strike - aggressiveTarget) - Math.abs(b.strike - aggressiveTarget));
+          let aggressive: StrikeSuggestion | null = null;
+          if (aggressiveCandidates.length > 0) {
+            const p = aggressiveCandidates[0];
+            const premium = p.bid > 0 ? p.bid : p.last > 0 ? p.last : 0;
+            if (premium > 0) {
+              const pAssign = probITMPut(spot, p.strike, T, ivPct / 100);
+              aggressive = {
+                strike: p.strike, premium, totalCredit: premium * 100,
+                annualizedYieldPct: (premium / p.strike) * (365 / dte) * 100,
+                pAssign: Math.round(pAssign * 10000) / 100,
+                buffer: (spot - p.strike) / spot,
+                effectiveCost: p.strike - premium,
+                effectiveCostVsSpotPct: (spot - (p.strike - premium)) / spot,
+                oi: p.oi,
+              };
+            }
+          }
+
+          const opportunityScore = ivHvRatio * sigmaMove;
+
+          cards.push({
+            ticker: t.ticker, spot, drop1d: t.drop1d, drop3d: t.drop3d,
+            hv20, sigmaMove, sectorRel, sectorLabel, ivPct, ivHvRatio,
+            ivPercentile, ivPercentilePrev, earningsInWin, putWall,
+            expiry: bestExpiry, dte, conservative, aggressive, opportunityScore,
+          });
+
+          // Log to DB
+          try {
+            await db.anomalyLog.upsert({
+              where: { ticker_expiry_detectedOnDay: { ticker: t.ticker, expiry: new Date(bestExpiry), detectedOnDay: today } },
+              create: {
+                ticker: t.ticker, detectedOnDay: today, expiry: new Date(bestExpiry),
+                spot, dropPct: t.drop1d, sigmaMove, sectorRel, ivHvRatio,
+                strikeConservative: conservative?.strike ?? 0, premiumConservative: conservative?.premium ?? 0,
+                strikeAggressive: aggressive?.strike ?? 0, premiumAggressive: aggressive?.premium ?? 0,
+              },
+              update: { spot, dropPct: t.drop1d, sigmaMove, sectorRel, ivHvRatio },
+            });
+          } catch { /* never break */ }
+        } catch { /* skip ticker */ }
+        finally { release(); }
+      }));
+
+      // Settle expired logs
+      try {
+        const unsettled = await db.anomalyLog.findMany({ where: { expiry: { lt: today }, outcome: null } });
+        for (const log of unsettled) {
+          try {
+            const cJson = await yahoo.fetchJSON(`https://query2.finance.yahoo.com/v8/finance/chart/${log.ticker}?interval=1d&range=1mo`) as {
+              chart?: { result?: Array<{ timestamp?: number[]; indicators?: { quote?: Array<{ close?: (number | null)[] }> } }> };
+            };
+            const timestamps = cJson?.chart?.result?.[0]?.timestamp ?? [];
+            const closes = cJson?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? [];
+            const expTs = log.expiry.getTime() / 1000;
+            let closeOnExpiry: number | null = null;
+            for (let i = 0; i < timestamps.length; i++) {
+              if (timestamps[i] >= expTs - 86400 && timestamps[i] <= expTs + 86400 && closes[i] != null) {
+                closeOnExpiry = closes[i] as number; break;
+              }
+            }
+            if (closeOnExpiry != null) {
+              const outcome = closeOnExpiry >= log.strikeConservative ? "MAX_KAR" : "ASSIGNMENT";
+              await db.anomalyLog.update({ where: { id: log.id }, data: { settledClose: closeOnExpiry, outcome } });
+            }
+          } catch { /* skip */ }
+        }
+      } catch { /* settle failed */ }
+
+      // Sort by opportunityScore desc
+      cards.sort((a, b) => b.opportunityScore - a.opportunityScore);
+
+      // Calibration stats
+      let calibration: { total: number; maxKar: number; assignment: number; bySigma: { low: { total: number; maxKar: number }; high: { total: number; maxKar: number } }; bySector: { company: { total: number; maxKar: number }; sector: { total: number; maxKar: number } } } | null = null;
+      try {
+        const settled = await db.anomalyLog.findMany({ where: { outcome: { not: null } } });
+        if (settled.length > 0) {
+          const maxKar = settled.filter(s => s.outcome === "MAX_KAR").length;
+          const highSigma = settled.filter(s => s.sigmaMove >= 3);
+          const lowSigma = settled.filter(s => s.sigmaMove < 3);
+          const company = settled.filter(s => s.sectorRel <= -0.04);
+          const sector = settled.filter(s => s.sectorRel > -0.04);
+          calibration = {
+            total: settled.length, maxKar, assignment: settled.length - maxKar,
+            bySigma: {
+              low: { total: lowSigma.length, maxKar: lowSigma.filter(s => s.outcome === "MAX_KAR").length },
+              high: { total: highSigma.length, maxKar: highSigma.filter(s => s.outcome === "MAX_KAR").length },
+            },
+            bySector: {
+              company: { total: company.length, maxKar: company.filter(s => s.outcome === "MAX_KAR").length },
+              sector: { total: sector.length, maxKar: sector.filter(s => s.outcome === "MAX_KAR").length },
+            },
+          };
+        }
+      } catch { /* ok */ }
+
+      return {
+        cards, calibration,
+        meta: { scanned: input.tickers.length, stage1Ms, triggeredCount: triggered.length },
+      };
+    }),
 });

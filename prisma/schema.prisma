@@ -141,3 +141,24 @@ model PredictionLog {
   @@unique([ticker, targetDate, madeOnDay])
   @@index([ticker])
 }
+
+model AnomalyLog {
+  id                    Int      @id @default(autoincrement())
+  ticker                String
+  detectedOn            DateTime @default(now())
+  detectedOnDay         DateTime
+  expiry                DateTime
+  spot                  Float
+  dropPct               Float
+  sigmaMove             Float
+  sectorRel             Float
+  ivHvRatio             Float
+  strikeConservative    Float
+  premiumConservative   Float
+  strikeAggressive      Float
+  premiumAggressive     Float
+  settledClose          Float?
+  outcome               String?
+  @@unique([ticker, expiry, detectedOnDay])
+  @@index([ticker])
+}

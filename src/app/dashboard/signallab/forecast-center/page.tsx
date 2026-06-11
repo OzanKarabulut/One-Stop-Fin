@@ -318,7 +318,7 @@ export default function ForecastCenterPage() {
   );
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line
 const DayCard = memo(function DayCard({ d }: { d: any }) {
   return (
     <div className={`rounded-lg border border-white/20 bg-[#0a0a0d] py-2 ${d.isExpiryDay ? "border-purple-500/40" : ""}`}>

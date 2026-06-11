@@ -117,6 +117,48 @@ async function fetchYahooJSON(urlStr: string): Promise<unknown> {
   return JSON.parse(result.body);
 }
 
+// ─── Spark batch quotes (daily closes, 5-min cache) ──────────────────────────
+const sparkCache = new Map<string, { data: Map<string, number[]>; ts: number }>();
+const SPARK_TTL = 5 * 60 * 1000;
+
+export async function getSparkCloses(symbols: string[]): Promise<Map<string, number[]>> {
+  const result = new Map<string, number[]>();
+  const chunks: string[][] = [];
+  for (let i = 0; i < symbols.length; i += 50) chunks.push(symbols.slice(i, i + 50));
+
+  for (const chunk of chunks) {
+    const key = chunk.slice().sort().join(",");
+    const cached = sparkCache.get(key);
+    if (cached && Date.now() - cached.ts < SPARK_TTL) {
+      cached.data.forEach((v, k) => result.set(k, v));
+      continue;
+    }
+
+    const chunkResult = new Map<string, number[]>();
+    try {
+      const url = `https://query1.finance.yahoo.com/v7/finance/spark?symbols=${chunk.join(",")}&range=7d&interval=1d`;
+      const { status, body } = curlFetch(url);
+      if (status === 200) {
+        const json = JSON.parse(body) as Record<string, unknown>;
+        // Shape: { spark: { result: [{ symbol, response: [{ indicators: { quote: [{ close }] } }] }] } }
+        // OR compact: { [symbol]: { close: [...] } }
+        const sparkResult = (json as { spark?: { result?: Array<{ symbol: string; response?: Array<{ indicators?: { quote?: Array<{ close?: (number | null)[] }> } }> }> } })?.spark?.result;
+        if (sparkResult) {
+          for (const item of sparkResult) {
+            const closes = item.response?.[0]?.indicators?.quote?.[0]?.close;
+            if (closes) chunkResult.set(item.symbol, closes.filter((c): c is number => c != null));
+          }
+        }
+      }
+    } catch { /* skip chunk on error */ }
+
+    sparkCache.set(key, { data: chunkResult, ts: Date.now() });
+    chunkResult.forEach((v, k) => result.set(k, v));
+  }
+
+  return result;
+}
+
 // ─── Provider ────────────────────────────────────────────────────────────────
 export const yahooProvider: MarketDataProvider = {
   name: "yahoo",

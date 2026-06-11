@@ -1,6 +1,6 @@
 "use client";
 
-import { TICKER_CATEGORIES } from "@/lib/ticker-universe";
+import { TICKER_CATEGORIES, type TickerCategory } from "@/lib/ticker-universe";
 import { Pencil } from "lucide-react";
 import { TickerTagEditor } from "./TickerTagEditor";
 
@@ -13,33 +13,35 @@ interface TickerChipsProps {
   onCustomTextChange: (s: string) => void;
   editingList: boolean;
   onEditingListChange: (v: boolean) => void;
+  extraCategories?: TickerCategory[];
 }
 
 function parseCustom(text: string): string[] {
   return text.split(/[,\s]+/).map(t => t.trim().toUpperCase()).filter(Boolean);
 }
 
-function chipCount(id: string, personalTickers: string[], customText: string): number {
+function chipCount(id: string, personalTickers: string[], customText: string, extra?: TickerCategory[]): number {
   if (id === "listem") return personalTickers.length;
   if (id === "ozel") return parseCustom(customText).length;
-  const cat = TICKER_CATEGORIES.find(c => c.id === id);
+  const cat = [...(extra ?? []), ...TICKER_CATEGORIES].find(c => c.id === id);
   return cat?.tickers.length ?? 0;
 }
 
-export function resolveTickers(activeIds: string[], personalTickers: string[], customText: string): string[] {
+export function resolveTickers(activeIds: string[], personalTickers: string[], customText: string, extra?: TickerCategory[]): string[] {
   const set = new Set<string>();
+  const allCats = [...(extra ?? []), ...TICKER_CATEGORIES];
   for (const id of activeIds) {
     if (id === "listem") personalTickers.forEach(t => set.add(t.toUpperCase()));
     else if (id === "ozel") parseCustom(customText).forEach(t => set.add(t));
     else {
-      const cat = TICKER_CATEGORIES.find(c => c.id === id);
+      const cat = allCats.find(c => c.id === id);
       cat?.tickers.forEach(t => set.add(t));
     }
   }
   return [...set];
 }
 
-export function TickerChips({ value, onChange, personalTickers, onPersonalTickersChange, customText, onCustomTextChange, editingList, onEditingListChange }: TickerChipsProps) {
+export function TickerChips({ value, onChange, personalTickers, onPersonalTickersChange, customText, onCustomTextChange, editingList, onEditingListChange, extraCategories }: TickerChipsProps) {
   const toggle = (id: string) => {
     if (value.includes(id)) {
       if (value.length <= 1) return;
@@ -50,6 +52,7 @@ export function TickerChips({ value, onChange, personalTickers, onPersonalTicker
   };
 
   const allChips: { id: string; label: string }[] = [
+    ...(extraCategories ?? []).map(c => ({ id: c.id, label: c.label })),
     { id: "listem", label: "CSP Listem" },
     ...TICKER_CATEGORIES.map(c => ({ id: c.id, label: c.label })),
     { id: "ozel", label: "Özel ✎" },
@@ -60,7 +63,7 @@ export function TickerChips({ value, onChange, personalTickers, onPersonalTicker
       <div className="flex flex-wrap items-center gap-2">
         {allChips.map(chip => {
           const active = value.includes(chip.id);
-          const count = chipCount(chip.id, personalTickers, customText);
+          const count = chipCount(chip.id, personalTickers, customText, extraCategories);
           return (
             <button key={chip.id} onClick={() => toggle(chip.id)}
               className={`rounded-full px-4 py-2 text-sm font-bold transition-colors ${

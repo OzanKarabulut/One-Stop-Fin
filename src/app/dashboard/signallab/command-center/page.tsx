@@ -94,6 +94,7 @@ export default function CommandCenterPage() {
   };
 
   // Sorted open positions by action severity
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const sortedOpen = useMemo(() => {
     if (!openPositions.data) return [];
     return [...openPositions.data].sort((a, b) => {
