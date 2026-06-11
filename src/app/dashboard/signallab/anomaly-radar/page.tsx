@@ -17,9 +17,8 @@ export default function AnomalyRadarPage() {
   } = useScanState({ prefix: "anomaly", defaultList: "", defaultBudget: 0, defaultChips: ["broad"] });
 
   const personalTickers = list.split(",").map(t => t.trim()).filter(Boolean);
-  const [debugTicker, setDebugTicker] = useState("");
   const [queryInput, setQueryInput] = useState<{ tickers: string[]; debugTicker?: string } | null>(null);
-  const [sortMode, setSortMode] = useState<"math" | "balanced">("math");
+  const [sortMode, setSortMode] = useState<"math" | "balanced">("balanced");
 
   useEffect(() => {
     const saved = localStorage.getItem("anomaly_sortMode");
@@ -41,7 +40,7 @@ export default function AnomalyRadarPage() {
 
   const handleScan = () => {
     const resolved = resolveTickers(activeChips, personalTickers, customTickers, EXTRA_CATS).slice(0, 300);
-    setQueryInput({ tickers: resolved, debugTicker: debugTicker.trim() || undefined });
+    setQueryInput({ tickers: resolved });
   };
 
   const resolvedCount = resolveTickers(activeChips, personalTickers, customTickers, EXTRA_CATS).length;
@@ -49,8 +48,8 @@ export default function AnomalyRadarPage() {
   return (
     <div className="space-y-4 p-4">
       {/* Header */}
-      <div className="rounded-lg border border-white/10 bg-[#101013] p-4 space-y-3">
-        <h1 className="text-2xl font-bold tracking-tight text-white">⚡ Anomali Radarı</h1>
+      <div className="rounded-lg border border-white/10 bg-[#101013] p-4">
+        <h1 className="text-2xl font-bold tracking-tight text-white mb-3">Anomali Radarı</h1>
         <TickerChips
           value={activeChips} onChange={setActiveChips}
           personalTickers={personalTickers} onPersonalTickersChange={(next) => setList(next.join(","))}
@@ -58,14 +57,13 @@ export default function AnomalyRadarPage() {
           editingList={editingList} onEditingListChange={setEditingList}
           extraCategories={EXTRA_CATS}
         />
-        <div className="flex items-center gap-4">
+        <div className="border-t border-white/10 mt-4 pt-4 flex flex-wrap items-center gap-4">
           <button onClick={handleScan} disabled={isFetching}
-            className="bg-[#ff7200] text-white font-bold rounded-lg px-6 py-2.5 text-sm hover:bg-[#ff8a2b] transition-colors disabled:opacity-50">
-            {isFetching ? "Taranıyor…" : "Radar Tara"}
+            className="bg-[#ff7200] text-white font-bold rounded-lg px-8 py-3 text-base hover:bg-[#ff8a2b] transition-colors disabled:opacity-50">
+            {isFetching ? "Taranıyor…" : "Anomali Tara"}
           </button>
-          <input value={debugTicker} onChange={e => setDebugTicker(e.target.value.toUpperCase())} placeholder="Tanı" className="rounded-lg bg-[#1a1a1f] border border-white/10 px-3 py-2 font-bold text-white/90 w-20 text-sm" />
           <span className="text-sm font-bold text-white/70">
-            {resolvedCount} hisse · Aşama 1 saniyeler, derin analiz sadece yakalananlara
+            {resolvedCount} hisse taranacak — sert düşenler ve artan IV&apos;ler analiz edilir, en mantıklı CSP seçenekleri listelenir ve puanlanır
           </span>
         </div>
       </div>
@@ -89,26 +87,17 @@ export default function AnomalyRadarPage() {
         </div>
       )}
 
-      {/* Debug output */}
-      {data?.meta.debug && (
-        <details className="rounded-lg border border-white/10 bg-[#101013] p-3">
-          <summary className="font-bold text-white/90 text-sm cursor-pointer">Tanı: {data.meta.debug.ticker}</summary>
-          <pre className="mt-2 text-xs font-mono text-white/80 overflow-x-auto whitespace-pre-wrap">{JSON.stringify(data.meta.debug, null, 2)}</pre>
-        </details>
-      )}
-
       {/* Results */}
       {data && data.cards.length > 0 && (
         <div className="space-y-4">
           <div className="flex items-center gap-4">
-            <div className="font-bold text-white text-lg">🔥 Düşüş Fırsatları</div>
             <div className="flex rounded-lg overflow-hidden border border-white/10">
-              <button onClick={() => setSortMode("math")} className={`px-3 py-1.5 text-xs font-bold transition-colors ${sortMode === "math" ? "bg-[#ff7200] text-white" : "bg-transparent text-white/70 hover:text-white"}`}>Salt Matematik</button>
               <button onClick={() => setSortMode("balanced")} className={`px-3 py-1.5 text-xs font-bold transition-colors ${sortMode === "balanced" ? "bg-[#ff7200] text-white" : "bg-transparent text-white/70 hover:text-white"}`}>Kalite Dengeli</button>
+              <button onClick={() => setSortMode("math")} className={`px-3 py-1.5 text-xs font-bold transition-colors ${sortMode === "math" ? "bg-[#ff7200] text-white" : "bg-transparent text-white/70 hover:text-white"}`}>Salt Matematik</button>
             </div>
+            <div className="font-bold text-white text-lg">🔥 Düşüş Fırsatları</div>
           </div>
           {sortedCards.map((c) => {
-            const tierClasses = c.tier === "GÜÇLÜ" ? "bg-emerald-500/20 text-emerald-400" : c.tier === "ORTA" ? "bg-yellow-500/20 text-yellow-400" : "bg-white/10 text-white/70";
             return (
             <div key={c.ticker} className="rounded-lg border border-white/10 bg-[#101013] p-4 space-y-3">
               {/* Header row */}
@@ -159,46 +148,28 @@ export default function AnomalyRadarPage() {
                 </div>
               )}
 
-              {/* Footer: scores LEFT, buttons RIGHT */}
-              <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
-                <div className="flex items-center gap-2">
-                  {sortMode === "math" ? (
-                    <>
-                      <div className={`flex items-baseline gap-2 rounded-lg px-4 py-2 ${tierClasses}`}>
-                        <span className="text-2xl font-bold leading-none">{c.displayScore}</span>
-                        <span className="text-xs font-bold opacity-90">/100 · FIRSAT</span>
-                      </div>
-                      <span className="rounded-lg px-3 py-2 bg-white/10 text-white/70 text-xs font-bold" title={(c.qualityWhy ?? []).join(", ")}>Kalite {c.qualityScore ?? "?"} ({c.qualitySource ?? "?"})</span>
-                    </>
-                  ) : (
-                    <>
-                      <div className={`flex items-baseline gap-2 rounded-lg px-4 py-2 ${(c.balancedScore ?? 0) >= 75 ? "bg-emerald-500/20 text-emerald-400" : (c.balancedScore ?? 0) >= 50 ? "bg-yellow-500/20 text-yellow-400" : "bg-white/10 text-white/70"}`}>
-                        <span className="text-2xl font-bold leading-none">{c.balancedScore ?? "?"}</span>
-                        <span className="text-xs font-bold opacity-90">/100 · DENGE</span>
-                      </div>
-                      <span className="rounded-lg px-3 py-2 bg-white/10 text-white/70 text-xs font-bold">Fırsat {c.displayScore}</span>
-                      <span className="rounded-lg px-3 py-2 bg-white/10 text-white/70 text-xs font-bold" title={(c.qualityWhy ?? []).join(", ")}>Kalite {c.qualityScore ?? "?"} ({c.qualitySource ?? "?"})</span>
-                    </>
-                  )}
-                  {c.premiumDollars != null && c.premiumDollars < 25 && (
-                    <span className="rounded-lg px-2 py-1 bg-white/10 text-white/60 text-xs font-bold" title={`Prim işlem maliyetini karşılamaz — skor ×${(c.premiumFactor ?? 1).toFixed(2)}`}>💀 prim ${Math.round(c.premiumDollars)}/kontrat</span>
-                  )}
+              {/* Footer: centered scores + buttons */}
+              <div className="mt-3 flex items-center justify-center gap-2 flex-wrap">
+                <span className={`rounded-lg px-3 py-2 text-sm font-bold ${(c.qualityScore ?? 50) >= 65 ? "bg-emerald-500/15 text-emerald-400" : (c.qualityScore ?? 50) >= 40 ? "bg-yellow-500/15 text-yellow-400" : "bg-red-500/15 text-red-400"}`} title={(c.qualityWhy ?? []).join(", ")}>Kalite {c.qualityScore ?? "?"} <span className="text-[10px] opacity-70">({c.qualitySource ?? "?"})</span></span>
+                {sortMode === "balanced" && <span className={`rounded-lg px-3 py-2 text-sm font-bold ${c.displayScore >= 65 ? "bg-emerald-500/15 text-emerald-400" : c.displayScore >= 40 ? "bg-yellow-500/15 text-yellow-400" : "bg-red-500/15 text-red-400"}`}>Fırsat {c.displayScore}</span>}
+                <div className={`flex items-baseline gap-1.5 rounded-lg px-3 py-2 ${(() => { const v = sortMode === "balanced" ? (c.balancedScore ?? 0) : c.displayScore; return v >= 75 ? "bg-emerald-500/20 text-emerald-400" : v >= 50 ? "bg-yellow-500/20 text-yellow-400" : "bg-white/10 text-white/70"; })()}`}>
+                  <span className="text-lg font-bold leading-none">{sortMode === "balanced" ? (c.balancedScore ?? "?") : c.displayScore}</span>
+                  <span className="text-xs font-bold opacity-90">/100 {sortMode === "balanced" ? "Denge" : "Fırsat"}</span>
                 </div>
-                <div className="flex gap-2">
-                  <DetayButton below content={{
-                    title: `${c.ticker} — Anomali Analizi`,
-                    logic: `Düşüş: ${(c.triggerDrop * 100).toFixed(1)}% (${c.trigger}) → ${c.sigmaMove.toFixed(1)}σ (${c.trigger} penceresinin σ'sı = HV20·√(${c.triggerDays}/252))\n1g: ${(c.drop1d * 100).toFixed(1)}% · dün: ${(c.prevDayDrop * 100).toFixed(1)}% · 3g: ${(c.drop3d * 100).toFixed(1)}%\nHV20: ${(c.hv20 * 100).toFixed(0)}%\nSektör relatif (${c.trigger}): ${(c.sectorRel * 100).toFixed(1)}% → ${c.sectorLabel}\nIV: %${c.ivPct.toFixed(0)} vs HV20: %${(c.hv20 * 100).toFixed(0)} → IV/HV: ${c.ivHvRatio.toFixed(1)}x\nSkor çarpanı: 5 günlük drawdown ${(c.dd5 * 100).toFixed(1)}% → ×${(1 + Math.abs(c.dd5)).toFixed(2)}${c.premiumFactor != null && c.premiumFactor < 1 ? ` · prim floor ×${c.premiumFactor.toFixed(2)}` : ""}\nŞişkin IV = yüksek prim. Çöküş SONRASI korku fiyatlanmış.\nAssignment = plan B: hisseyi iskontolu sahiplenirsin.\nSkor: ${c.ivHvRatio.toFixed(1)}x × ${c.sigmaMove.toFixed(1)}σ × ${(1 + Math.abs(c.dd5)).toFixed(2)} = ${c.opportunityScore.toFixed(2)} → ${c.displayScore}/100\nKalite: ${c.qualityScore ?? "?"}/100 (${c.qualitySource ?? "?"}) — ${(c.qualityWhy ?? []).join(", ")}.\nDenge = Fırsat ${c.displayScore} × Kalite ${c.qualityScore ?? "?"}/100 = ${c.balancedScore ?? "?"}`,
-                    scenarios: [
-                      { durum: "Fiyat toparlar", sonuc: `Prim cebinde kalır — yıllık %${c.conservative?.annualizedYieldPct.toFixed(0) ?? "?"} getiri`, renk: "green" },
-                      { durum: "Fiyat düşer, strike kırılır", sonuc: `Hisse $${c.conservative?.effectiveCost.toFixed(1) ?? "?"} maliyetle sahiplenilir (bugünden %${((c.conservative?.effectiveCostVsSpotPct ?? 0) * 100).toFixed(0)} iskonto)`, renk: "yellow" },
-                      { durum: "Sert düşüş devam eder", sonuc: "Maliyet avantajlı sahiplik, ama kayıp mümkün", renk: "red" },
-                    ],
-                  }} />
-                  <a href={`/dashboard/signallab/csp-screener?ticker=${c.ticker}${c.putWall ? `&maxStrike=${c.putWall}` : `&maxStrike=${c.conservative?.strike ?? ""}`}`}
-                    className="px-4 py-2 rounded font-bold text-sm bg-[#ff7200] text-white hover:bg-[#ff8a2b] transition-colors">
-                    CSP Taramasına Gönder →
-                  </a>
-                </div>
+                {c.premiumDollars != null && c.premiumDollars < 25 && <span className="rounded-lg px-2 py-1 bg-white/10 text-white/60 text-xs font-bold" title={`Prim işlem maliyetini karşılamaz — skor ×${(c.premiumFactor ?? 1).toFixed(2)}`}>💀 ${Math.round(c.premiumDollars)}</span>}
+                <DetayButton below content={{
+                  title: `${c.ticker} — Anomali Analizi`,
+                  logic: `Düşüş: ${(c.triggerDrop * 100).toFixed(1)}% (${c.trigger}) → ${c.sigmaMove.toFixed(1)}σ (${c.trigger} penceresinin σ'sı = HV20·√(${c.triggerDays}/252))\n1g: ${(c.drop1d * 100).toFixed(1)}% · dün: ${(c.prevDayDrop * 100).toFixed(1)}% · 3g: ${(c.drop3d * 100).toFixed(1)}%\nHV20: ${(c.hv20 * 100).toFixed(0)}%\nSektör relatif (${c.trigger}): ${(c.sectorRel * 100).toFixed(1)}% → ${c.sectorLabel}\nIV: %${c.ivPct.toFixed(0)} vs HV20: %${(c.hv20 * 100).toFixed(0)} → IV/HV: ${c.ivHvRatio.toFixed(1)}x\nSkor çarpanı: 5 günlük drawdown ${(c.dd5 * 100).toFixed(1)}% → ×${(1 + Math.abs(c.dd5)).toFixed(2)}${c.premiumFactor != null && c.premiumFactor < 1 ? ` · prim floor ×${c.premiumFactor.toFixed(2)}` : ""}\nŞişkin IV = yüksek prim. Çöküş SONRASI korku fiyatlanmış.\nAssignment = plan B: hisseyi iskontolu sahiplenirsin.\nSkor: ${c.ivHvRatio.toFixed(1)}x × ${c.sigmaMove.toFixed(1)}σ × ${(1 + Math.abs(c.dd5)).toFixed(2)} = ${c.opportunityScore.toFixed(2)} → ${c.displayScore}/100\nKalite: ${c.qualityScore ?? "?"}/100 (${c.qualitySource ?? "?"}) — ${(c.qualityWhy ?? []).join(", ")}.\nDenge = Fırsat ${c.displayScore} × Kalite ${c.qualityScore ?? "?"}/100 = ${c.balancedScore ?? "?"}`,
+                  scenarios: [
+                    { durum: "Fiyat toparlar", sonuc: `Prim cebinde kalır — yıllık %${c.conservative?.annualizedYieldPct.toFixed(0) ?? "?"} getiri`, renk: "green" },
+                    { durum: "Fiyat düşer, strike kırılır", sonuc: `Hisse $${c.conservative?.effectiveCost.toFixed(1) ?? "?"} maliyetle sahiplenilir (bugünden %${((c.conservative?.effectiveCostVsSpotPct ?? 0) * 100).toFixed(0)} iskonto)`, renk: "yellow" },
+                    { durum: "Sert düşüş devam eder", sonuc: "Maliyet avantajlı sahiplik, ama kayıp mümkün", renk: "red" },
+                  ],
+                }} />
+                <a href={`/dashboard/signallab/csp-screener?ticker=${c.ticker}${c.putWall ? `&maxStrike=${c.putWall}` : `&maxStrike=${c.conservative?.strike ?? ""}`}`}
+                  className="rounded-lg px-3 py-2 text-sm font-bold bg-[#ff7200] text-white hover:bg-[#ff8a2b] whitespace-nowrap transition-colors">
+                  CSP Tara →
+                </a>
               </div>
             </div>
             );

@@ -6,9 +6,10 @@ interface TickerTagEditorProps {
   tickers: string[];
   onChange: (next: string[]) => void;
   title?: string;
+  readOnly?: boolean;
 }
 
-export function TickerTagEditor({ tickers, onChange, title }: TickerTagEditorProps) {
+export function TickerTagEditor({ tickers, onChange, title, readOnly }: TickerTagEditorProps) {
   const [draft, setDraft] = useState("");
   const [dup, setDup] = useState(false);
 
@@ -46,28 +47,32 @@ export function TickerTagEditor({ tickers, onChange, title }: TickerTagEditorPro
 
       <div className="flex flex-wrap gap-x-2 gap-y-3 min-h-[52px]">
         {tickers.map(t => (
-          <span key={t} className="relative inline-flex items-center border border-white/35 rounded-full px-3 py-1.5 pr-7 text-sm font-bold text-white bg-white/5">
+          <span key={t} className={`relative inline-flex items-center border border-white/35 rounded-full px-3 py-1.5 ${readOnly ? "" : "pr-7"} text-sm font-bold text-white bg-white/5`}>
             {t}
-            <button
-              aria-label={`${t} sil`}
-              onClick={() => { onChange(tickers.filter(v => v !== t)); setDup(false); }}
-              className="absolute top-1/2 -translate-y-1/2 right-2 w-4 h-4 rounded-full bg-white/15 hover:bg-red-400 text-white text-[9px] font-bold leading-none flex items-center justify-center"
-            >✕</button>
+            {!readOnly && (
+              <button
+                aria-label={`${t} sil`}
+                onClick={() => { onChange(tickers.filter(v => v !== t)); setDup(false); }}
+                className="absolute top-1/2 -translate-y-1/2 right-2 w-4 h-4 rounded-full bg-white/15 hover:bg-red-400 text-white text-[9px] font-bold leading-none flex items-center justify-center"
+              >✕</button>
+            )}
           </span>
         ))}
       </div>
 
-      <div className="flex gap-2 mt-3 items-center">
-        <input
-          value={draft}
-          onChange={e => { setDraft(e.target.value); setDup(false); }}
-          onKeyDown={handleKeyDown}
-          placeholder="Ticker ekle — Enter veya virgül (örn. NVDA, TSLA)"
-          className="flex-1 bg-[#161616] text-white font-bold text-sm border border-white/15 rounded-lg px-3.5 py-2.5 uppercase placeholder:text-white/40 placeholder:normal-case focus:outline-none focus:ring-1 focus:ring-[#ff7200]/50"
-        />
-        <button onClick={addFromDraft} className="bg-[#ff7200] hover:bg-[#ff8a2b] text-white font-bold text-sm rounded-lg px-4 py-2.5 transition-colors">+ Ekle</button>
-      </div>
-      {dup && <p className="text-yellow-400 text-xs font-bold mt-2">Zaten listede</p>}
+      {!readOnly && (
+        <div className="flex gap-2 mt-3 items-center">
+          <input
+            value={draft}
+            onChange={e => { setDraft(e.target.value); setDup(false); }}
+            onKeyDown={handleKeyDown}
+            placeholder="Ticker ekle — Enter veya virgül (örn. NVDA, TSLA)"
+            className="flex-1 bg-[#161616] text-white font-bold text-sm border border-white/15 rounded-lg px-3.5 py-2.5 uppercase placeholder:text-white/40 placeholder:normal-case focus:outline-none focus:ring-1 focus:ring-[#ff7200]/50"
+          />
+          <button onClick={addFromDraft} className="bg-[#ff7200] hover:bg-[#ff8a2b] text-white font-bold text-sm rounded-lg px-4 py-2.5 transition-colors">+ Ekle</button>
+        </div>
+      )}
+      {!readOnly && dup && <p className="text-yellow-400 text-xs font-bold mt-2">Zaten listede</p>}
     </div>
   );
 }

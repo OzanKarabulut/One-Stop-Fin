@@ -88,8 +88,14 @@ export function TickerChips({ value, onChange, personalTickers, onPersonalTicker
         />
       )}
       {editingList && (
-        <div className="mt-3">
-          <TickerTagEditor tickers={personalTickers} onChange={onPersonalTickersChange} />
+        <div className="mt-3 space-y-3">
+          <TickerTagEditor tickers={personalTickers} onChange={onPersonalTickersChange} title="CSP Listem" />
+          {value.filter(id => id !== "listem" && id !== "ozel").map(id => {
+            const allCats = [...(extraCategories ?? []), ...TICKER_CATEGORIES];
+            const cat = allCats.find(c => c.id === id);
+            if (!cat) return null;
+            return <TickerTagEditor key={id} tickers={cat.tickers} onChange={() => {}} title={cat.label} readOnly />;
+          })}
         </div>
       )}
     </div>
