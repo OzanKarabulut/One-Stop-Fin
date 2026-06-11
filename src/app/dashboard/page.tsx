@@ -101,7 +101,7 @@ function EventRow({ ev, open, onToggle, router }: { ev: MarketEvent; open: boole
         </div>
         {/* Right 1/3: time + buttons in one row */}
         <div className="shrink-0 flex items-center gap-2 ml-4">
-          <span className="text-xs font-bold text-white/90">{ev.time ?? ""}</span>
+          <span className="text-base font-bold text-white/90 mr-3">{ev.time ?? ""}</span>
           <button onClick={onToggle}
             className={cn("rounded-lg px-4 py-2 text-sm font-bold transition-colors",
               open ? "bg-[#ff7200]/20 text-[#ff7200] border border-[#ff7200]/40" : "bg-[#ff7200] text-white hover:bg-[#ff8a2b]")}>
