@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useMemo, memo } from "react";
 import { trpc } from "@/lib/trpc/client";
 import { DetayButton } from "@/components/ui/DetailPanel";
 import { ComposedChart, Area, Line, XAxis, YAxis, Tooltip, ReferenceLine, ResponsiveContainer } from "recharts";
@@ -26,6 +26,9 @@ export default function ForecastCenterPage() {
     setQueryInput({ ticker: ticker.toUpperCase(), targetDate: effectiveDate, mode: effectiveMode });
     setTimeout(() => refetch(), 0);
   };
+
+  const pricePathData = useMemo(() => data?.days?.map(d => ({ date: d.date.slice(8), point: d.point.price })) ?? [], [data]);
+  const bandChartData = useMemo(() => data?.days?.map(d => ({ date: d.date.slice(8), lower: d.band[0], upper: d.band[1], point: d.point.price })) ?? [], [data]);
 
   return (
     <div className="space-y-4 p-4">
@@ -100,7 +103,7 @@ export default function ForecastCenterPage() {
             <div className="col-span-2 rounded-lg border border-white/10 bg-[#101013] p-3">
               <div className="font-bold text-white text-sm mb-2">Fiyat Yolu</div>
               <ResponsiveContainer width="100%" height={360}>
-                <ComposedChart data={data.days.map(d => ({ date: d.date.slice(8), point: d.point.price }))} margin={{ top: 25, right: 30, bottom: 10, left: 10 }}>
+                <ComposedChart data={pricePathData} margin={{ top: 25, right: 30, bottom: 10, left: 10 }}>
                   <XAxis dataKey="date" tick={{ fill: "#fff", fontSize: 11, fontWeight: "bold" }} axisLine={{ stroke: "#fff", strokeWidth: 2 }} tickLine={{ stroke: "#fff" }} />
                   <YAxis domain={[(dataMin: number) => Math.floor(dataMin * 0.995), (dataMax: number) => Math.ceil(dataMax * 1.005)]} tick={{ fill: "#fff", fontSize: 11, fontWeight: "bold" }} width={45} axisLine={{ stroke: "#fff", strokeWidth: 2 }} tickLine={{ stroke: "#fff" }} />
                   <Line type="monotone" dataKey="point" stroke="#ff7200" strokeWidth={3} dot={{ fill: "#ffffff", r: 5, strokeWidth: 2, stroke: "#ff7200" }} label={({ x, y, value, index }: { x: number; y: number; value: number; index: number }) => (<text x={index === 0 ? x + 25 : x} y={y - 10} fill="#ffffff" fontSize={12} fontWeight="bold" textAnchor="middle">${value.toFixed(1)}</text>)} />
@@ -112,7 +115,7 @@ export default function ForecastCenterPage() {
             <div className="col-span-3 rounded-lg border border-white/10 bg-[#101013] p-3">
               <div className="font-bold text-white text-sm mb-2">1σ Bant + Yapısal Seviyeler</div>
               <ResponsiveContainer width="100%" height={360}>
-                <ComposedChart data={data.days.map(d => ({ date: d.date.slice(8), lower: d.band[0], upper: d.band[1], point: d.point.price }))} margin={{ top: 25, right: 20, bottom: 10, left: 20 }}>
+                <ComposedChart data={bandChartData} margin={{ top: 25, right: 20, bottom: 10, left: 20 }}>
                   <XAxis dataKey="date" tick={{ fill: "#fff", fontSize: 11, fontWeight: "bold" }} axisLine={{ stroke: "#fff", strokeWidth: 2 }} tickLine={{ stroke: "#fff" }} />
                   <YAxis domain={[(dataMin: number) => Math.floor(dataMin * 0.98), (dataMax: number) => Math.ceil(dataMax * 1.02)]} tick={{ fill: "#fff", fontSize: 11, fontWeight: "bold" }} axisLine={{ stroke: "#fff", strokeWidth: 2 }} tickLine={{ stroke: "#fff" }} />
                   <Tooltip contentStyle={{ background: "#1a1a1f", border: "1px solid rgba(255,255,255,0.1)", fontWeight: "bold" }} />
@@ -140,31 +143,10 @@ export default function ForecastCenterPage() {
               <span className="w-44 text-center ml-6">1σ Bant</span>
               <span className="w-48 text-center ml-6">Bileşenler</span>
               <span className="flex-1 text-left ml-[200px]">Olaylar</span>
-              <span className="w-16 text-center ml-6">Vade</span>
               <span className="w-20 ml-6"></span>
             </div>
             {data.days.map((d, i) => (
-              <div key={i} className={`rounded-lg border border-white/20 bg-[#0a0a0d] px-4 py-2 ${d.isExpiryDay ? "border-purple-500/40" : ""}`}>
-                <div className="flex items-center justify-between flex-wrap">
-                  <div className="flex items-center text-sm font-bold whitespace-nowrap">
-                    <span className="w-24 text-center text-white">{d.date}</span>
-                    <span className="w-24 text-center ml-6"><span className="bg-[#ff7200] text-white rounded px-2 py-1.5">${d.point.price.toFixed(2)}</span></span>
-                    <span className="w-44 text-center ml-6 text-white">${d.band[0].toFixed(2)} — ${d.band[1].toFixed(2)}</span>
-                    <span className="w-48 text-center ml-6 text-white/90">Skew:{d.point.skewComponent >= 0 ? "+" : ""}{d.point.skewComponent.toFixed(2)}{d.isExpiryDay && ` Pin:${d.point.pinComponent >= 0 ? "+" : ""}${d.point.pinComponent.toFixed(2)}`}</span>
-                    <span className="flex-1 text-left ml-[200px]">{d.events.length > 0 ? <span className="text-yellow-300">{d.events.map(e => e.name).join(", ")}</span> : <span className="text-white/50">—</span>}</span>
-                    <span className="w-16 text-center ml-6">{d.isExpiryDay ? <span className="text-purple-300">OPEX</span> : <span className="text-white/50">—</span>}</span>
-                  </div>
-                  <DetayButton below content={{
-                    title: `${d.date} — Günlük Analiz`,
-                    logic: `Model Tahmini: $${d.point.price.toFixed(2)}\n1σ Bant: $${d.band[0].toFixed(2)} — $${d.band[1].toFixed(2)}\nSkew Bileşeni: ${d.point.skewComponent >= 0 ? "+" : ""}${d.point.skewComponent.toFixed(2)}${d.isExpiryDay ? `\nPin Bileşeni: ${d.point.pinComponent >= 0 ? "+" : ""}${d.point.pinComponent.toFixed(2)}` : ""}\n${d.events.length > 0 ? `Olaylar: ${d.events.map(e => e.name).join(", ")}` : "Olay yok"}${d.isExpiryDay ? "\n⚠️ Opsiyon vade günü — gamma pinning etkisi aktif" : ""}`,
-                    scenarios: [
-                      { durum: `Spot > $${d.band[1].toFixed(0)}`, sonuc: "Üst bant kırılımı — momentum yukarı", renk: "green" as const },
-                      { durum: `Spot < $${d.band[0].toFixed(0)}`, sonuc: "Alt bant kırılımı — satış baskısı", renk: "red" as const },
-                      { durum: `$${d.band[0].toFixed(0)} < Spot < $${d.band[1].toFixed(0)}`, sonuc: "Bant içi — ortalamaya dönüş beklenir", renk: "yellow" as const },
-                    ],
-                  }} />
-                </div>
-              </div>
+              <DayCard key={i} d={d} />
             ))}
           </div>
 
@@ -335,3 +317,29 @@ export default function ForecastCenterPage() {
     </div>
   );
 }
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const DayCard = memo(function DayCard({ d }: { d: any }) {
+  return (
+    <div className={`rounded-lg border border-white/20 bg-[#0a0a0d] py-2 ${d.isExpiryDay ? "border-purple-500/40" : ""}`}>
+      <div className="flex items-center justify-between flex-wrap">
+        <div className="flex items-center text-sm font-bold whitespace-nowrap">
+          <span className="w-24 text-center text-white">{d.date}</span>
+          <span className="w-24 text-center ml-6"><span className="bg-[#ff7200] text-white rounded px-2 py-1.5">${d.point.price.toFixed(2)}</span></span>
+          <span className="w-44 text-center ml-6 text-white">${d.band[0].toFixed(2)} — ${d.band[1].toFixed(2)}</span>
+          <span className="w-48 text-center ml-6 text-white/90">Skew:{d.point.skewComponent >= 0 ? "+" : ""}{d.point.skewComponent.toFixed(2)}{d.isExpiryDay && ` Pin:${d.point.pinComponent >= 0 ? "+" : ""}${d.point.pinComponent.toFixed(2)}`}</span>
+          <span className="flex-1 text-left ml-[200px]">{d.events.length > 0 ? <span className="text-yellow-300">{d.events.map((e: { name: string }) => e.name).join(", ")}</span> : <span className="text-white/50">—</span>}{d.isExpiryDay && <span className="ml-2 text-purple-300">OPEX</span>}</span>
+        </div>
+        <DetayButton below content={{
+          title: `${d.date} — Günlük Analiz`,
+          logic: `Model Tahmini: $${d.point.price.toFixed(2)}\n1σ Bant: $${d.band[0].toFixed(2)} — $${d.band[1].toFixed(2)}\nSkew Bileşeni: ${d.point.skewComponent >= 0 ? "+" : ""}${d.point.skewComponent.toFixed(2)}${d.isExpiryDay ? `\nPin Bileşeni: ${d.point.pinComponent >= 0 ? "+" : ""}${d.point.pinComponent.toFixed(2)}` : ""}\n${d.events.length > 0 ? `Olaylar: ${d.events.map((e: { name: string }) => e.name).join(", ")}` : "Olay yok"}${d.isExpiryDay ? "\n⚠️ Opsiyon vade günü — gamma pinning etkisi aktif" : ""}`,
+          scenarios: [
+            { durum: `Spot > $${d.band[1].toFixed(0)}`, sonuc: "Üst bant kırılımı — momentum yukarı", renk: "green" as const },
+            { durum: `Spot < $${d.band[0].toFixed(0)}`, sonuc: "Alt bant kırılımı — satış baskısı", renk: "red" as const },
+            { durum: `$${d.band[0].toFixed(0)} < Spot < $${d.band[1].toFixed(0)}`, sonuc: "Bant içi — ortalamaya dönüş beklenir", renk: "yellow" as const },
+          ],
+        }} />
+      </div>
+    </div>
+  );
+});

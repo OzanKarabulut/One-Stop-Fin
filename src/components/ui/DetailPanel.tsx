@@ -16,10 +16,14 @@ export function DetayButton({ content, below }: { content: DetailContent; below?
         className="bg-[#ff7200] text-white font-bold rounded-lg px-4 py-2 text-sm hover:bg-[#ff8a2b] transition-colors shrink-0">
         Detay {open ? "▾" : "▸"}
       </button>
+      {open && below && <div className="w-full mt-2"><DetailPanel content={content} /></div>}
       {open && !below && <DetailPanel content={content} />}
-      {open && below && <div className="basis-full mt-2"><DetailPanel content={content} /></div>}
     </>
   );
+}
+
+export function DetayPanelBelow({ content, below }: { content: DetailContent; below?: boolean }) {
+  return below ? <DetailPanel content={content} /> : null;
 }
 
 export function DetailPanel({ content }: { content: DetailContent }) {
