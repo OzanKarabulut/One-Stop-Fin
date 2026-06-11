@@ -2,7 +2,8 @@
 
 import { trpc } from "@/lib/trpc/client";
 import { TickerChips, resolveTickers } from "@/components/ui/TickerChips";
-import { DetayButton } from "@/components/ui/DetailPanel";
+import { DetayButton, DetailPanel } from "@/components/ui/DetailPanel";
+import type { DetailContent } from "@/components/ui/DetailPanel";
 import { BROAD_UNIVERSE } from "@/lib/ticker-universe";
 import type { TickerCategory } from "@/lib/ticker-universe";
 import { useScanState } from "@/hooks/useScanState";
@@ -90,90 +91,14 @@ export default function AnomalyRadarPage() {
       {/* Results */}
       {data && data.cards.length > 0 && (
         <div className="space-y-4">
-          <div className="flex items-center gap-4">
-            <div className="flex rounded-lg overflow-hidden border border-white/10">
-              <button onClick={() => setSortMode("balanced")} className={`px-3 py-1.5 text-xs font-bold transition-colors ${sortMode === "balanced" ? "bg-[#ff7200] text-white" : "bg-transparent text-white/70 hover:text-white"}`}>Kalite Dengeli</button>
-              <button onClick={() => setSortMode("math")} className={`px-3 py-1.5 text-xs font-bold transition-colors ${sortMode === "math" ? "bg-[#ff7200] text-white" : "bg-transparent text-white/70 hover:text-white"}`}>Salt Matematik</button>
-            </div>
-            <div className="font-bold text-white text-lg">🔥 Düşüş Fırsatları</div>
+          <div className="font-bold text-white text-lg">Düşüş Fırsatları</div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setSortMode("balanced")} className={`rounded-lg px-5 py-2.5 text-sm font-bold border-2 border-[#ff7200] transition-colors ${sortMode === "balanced" ? "bg-[#ff7200] text-white" : "bg-transparent text-[#ff7200] hover:bg-[#ff7200]/10"}`}>Kalite Dengeli</button>
+            <button onClick={() => setSortMode("math")} className={`rounded-lg px-5 py-2.5 text-sm font-bold border-2 border-[#ff7200] transition-colors ${sortMode === "math" ? "bg-[#ff7200] text-white" : "bg-transparent text-[#ff7200] hover:bg-[#ff7200]/10"}`}>Salt Matematik</button>
           </div>
-          {sortedCards.map((c) => {
-            return (
-            <div key={c.ticker} className="rounded-lg border border-white/10 bg-[#101013] p-4 space-y-3">
-              {/* Header row */}
-              <div className="flex items-center gap-3 flex-wrap">
-                <span className="text-xl font-bold text-white">{c.ticker}</span>
-                <span className="text-lg font-bold text-white">${c.spot.toFixed(2)}</span>
-                <span className="bg-red-500/20 text-red-400 font-bold text-sm rounded px-2 py-0.5">
-                  {c.trigger} {(c.triggerDrop * 100).toFixed(1)}%
-                </span>
-                <span className="text-xs font-bold text-white/70">
-                  {c.trigger === "dün" && `bugün ${c.drop1d >= 0 ? "+" : ""}${(c.drop1d * 100).toFixed(1)}% (${c.drop1d >= 0 ? "toparlama" : "devam"})`}
-                  {c.trigger === "bugün" && `5g: ${(c.dd5 * 100).toFixed(1)}%`}
-                  {c.trigger === "3g" && `bugün: ${(c.drop1d * 100).toFixed(1)}% · 5g: ${(c.dd5 * 100).toFixed(1)}%`}
-                </span>
-                {c.trigger !== "bugün" && <span className="text-xs font-bold text-white/70">5g: {(c.dd5 * 100).toFixed(1)}%</span>}
-                <span className="font-bold text-white text-sm">{c.sigmaMove.toFixed(1)}σ hareket</span>
-                <span className="bg-white/10 text-white/90 font-bold text-xs rounded px-2 py-0.5">{c.sectorLabel}</span>
-                <span className={`font-bold text-xs rounded px-2 py-0.5 ${c.ivHvRatio < 1 ? "bg-white/10 text-white/60" : "bg-white/10 text-white/90"}`} title={c.ivHvRatio < 1 ? "Prim, gerçekleşen volatiliteye göre UCUZ — çöküş HV'yi şişirmiş, VRP negatif" : undefined}>IV/HV {c.ivHvRatio.toFixed(1)}x</span>
-                {c.ivPercentile != null && c.ivPercentilePrev != null && (
-                  <span className="bg-white/10 text-white/90 font-bold text-xs rounded px-2 py-0.5">IV%ile {c.ivPercentilePrev}→{c.ivPercentile}</span>
-                )}
-                {c.earningsInWin && <span className="bg-white/10 text-white/90 font-bold text-xs rounded px-2 py-0.5">📊 ERN</span>}
-              </div>
-
-              {/* Strike suggestions */}
-              {c.conservative && !c.aggressive && (
-                <div className="text-sm font-bold text-white/90">
-                  Öneri: {c.expiry} ${c.conservative.strike}P — prim ${c.conservative.premium.toFixed(2)} (${c.conservative.totalCredit.toFixed(0)}/kontrat) · yıllık %{c.conservative.annualizedYieldPct.toFixed(0)} · tampon %{(c.conservative.buffer * 100).toFixed(0)} · P(assignment) %{c.conservative.pAssign.toFixed(1)}
-                  {c.putWall && c.conservative.strike <= c.putWall && <span className="text-emerald-400 ml-2">put wall altı ✓</span>}
-                </div>
-              )}
-              {c.conservative && c.aggressive && (
-                <>
-                  <div className="text-sm font-bold text-white/90">
-                    🛡 Muhafazakâr: {c.expiry} ${c.conservative.strike}P — prim ${c.conservative.premium.toFixed(2)} (${c.conservative.totalCredit.toFixed(0)}/kontrat) · yıllık %{c.conservative.annualizedYieldPct.toFixed(0)} · tampon %{(c.conservative.buffer * 100).toFixed(0)} · P(assignment) %{c.conservative.pAssign.toFixed(1)}
-                    {c.putWall && c.conservative.strike <= c.putWall && <span className="text-emerald-400 ml-2">put wall altı ✓</span>}
-                  </div>
-                  <div className="text-sm font-bold text-white/90">
-                    ⚡ Agresif: {c.expiry} ${c.aggressive.strike}P — prim ${c.aggressive.premium.toFixed(2)} (${c.aggressive.totalCredit.toFixed(0)}/kontrat) · yıllık %{c.aggressive.annualizedYieldPct.toFixed(0)} · tampon %{(c.aggressive.buffer * 100).toFixed(0)} · P(assignment) %{c.aggressive.pAssign.toFixed(1)}
-                  </div>
-                </>
-              )}
-
-              {/* Assignment line */}
-              {c.conservative && (
-                <div className="text-sm font-bold text-white/90">
-                  En kötü: ${c.conservative.strike}&apos;dan sahiplik — efektif maliyet ${c.conservative.effectiveCost.toFixed(2)} (bugünden %{(c.conservative.effectiveCostVsSpotPct * 100).toFixed(0)} aşağı)
-                </div>
-              )}
-
-              {/* Footer: centered scores + buttons */}
-              <div className="mt-3 flex items-center justify-center gap-2 flex-wrap">
-                <span className={`rounded-lg px-3 py-2 text-sm font-bold ${(c.qualityScore ?? 50) >= 65 ? "bg-emerald-500/15 text-emerald-400" : (c.qualityScore ?? 50) >= 40 ? "bg-yellow-500/15 text-yellow-400" : "bg-red-500/15 text-red-400"}`} title={(c.qualityWhy ?? []).join(", ")}>Kalite {c.qualityScore ?? "?"} <span className="text-[10px] opacity-70">({c.qualitySource ?? "?"})</span></span>
-                {sortMode === "balanced" && <span className={`rounded-lg px-3 py-2 text-sm font-bold ${c.displayScore >= 65 ? "bg-emerald-500/15 text-emerald-400" : c.displayScore >= 40 ? "bg-yellow-500/15 text-yellow-400" : "bg-red-500/15 text-red-400"}`}>Fırsat {c.displayScore}</span>}
-                <div className={`flex items-baseline gap-1.5 rounded-lg px-3 py-2 ${(() => { const v = sortMode === "balanced" ? (c.balancedScore ?? 0) : c.displayScore; return v >= 75 ? "bg-emerald-500/20 text-emerald-400" : v >= 50 ? "bg-yellow-500/20 text-yellow-400" : "bg-white/10 text-white/70"; })()}`}>
-                  <span className="text-lg font-bold leading-none">{sortMode === "balanced" ? (c.balancedScore ?? "?") : c.displayScore}</span>
-                  <span className="text-xs font-bold opacity-90">/100 {sortMode === "balanced" ? "Denge" : "Fırsat"}</span>
-                </div>
-                {c.premiumDollars != null && c.premiumDollars < 25 && <span className="rounded-lg px-2 py-1 bg-white/10 text-white/60 text-xs font-bold" title={`Prim işlem maliyetini karşılamaz — skor ×${(c.premiumFactor ?? 1).toFixed(2)}`}>💀 ${Math.round(c.premiumDollars)}</span>}
-                <DetayButton below content={{
-                  title: `${c.ticker} — Anomali Analizi`,
-                  logic: `Düşüş: ${(c.triggerDrop * 100).toFixed(1)}% (${c.trigger}) → ${c.sigmaMove.toFixed(1)}σ (${c.trigger} penceresinin σ'sı = HV20·√(${c.triggerDays}/252))\n1g: ${(c.drop1d * 100).toFixed(1)}% · dün: ${(c.prevDayDrop * 100).toFixed(1)}% · 3g: ${(c.drop3d * 100).toFixed(1)}%\nHV20: ${(c.hv20 * 100).toFixed(0)}%\nSektör relatif (${c.trigger}): ${(c.sectorRel * 100).toFixed(1)}% → ${c.sectorLabel}\nIV: %${c.ivPct.toFixed(0)} vs HV20: %${(c.hv20 * 100).toFixed(0)} → IV/HV: ${c.ivHvRatio.toFixed(1)}x\nSkor çarpanı: 5 günlük drawdown ${(c.dd5 * 100).toFixed(1)}% → ×${(1 + Math.abs(c.dd5)).toFixed(2)}${c.premiumFactor != null && c.premiumFactor < 1 ? ` · prim floor ×${c.premiumFactor.toFixed(2)}` : ""}\nŞişkin IV = yüksek prim. Çöküş SONRASI korku fiyatlanmış.\nAssignment = plan B: hisseyi iskontolu sahiplenirsin.\nSkor: ${c.ivHvRatio.toFixed(1)}x × ${c.sigmaMove.toFixed(1)}σ × ${(1 + Math.abs(c.dd5)).toFixed(2)} = ${c.opportunityScore.toFixed(2)} → ${c.displayScore}/100\nKalite: ${c.qualityScore ?? "?"}/100 (${c.qualitySource ?? "?"}) — ${(c.qualityWhy ?? []).join(", ")}.\nDenge = Fırsat ${c.displayScore} × Kalite ${c.qualityScore ?? "?"}/100 = ${c.balancedScore ?? "?"}`,
-                  scenarios: [
-                    { durum: "Fiyat toparlar", sonuc: `Prim cebinde kalır — yıllık %${c.conservative?.annualizedYieldPct.toFixed(0) ?? "?"} getiri`, renk: "green" },
-                    { durum: "Fiyat düşer, strike kırılır", sonuc: `Hisse $${c.conservative?.effectiveCost.toFixed(1) ?? "?"} maliyetle sahiplenilir (bugünden %${((c.conservative?.effectiveCostVsSpotPct ?? 0) * 100).toFixed(0)} iskonto)`, renk: "yellow" },
-                    { durum: "Sert düşüş devam eder", sonuc: "Maliyet avantajlı sahiplik, ama kayıp mümkün", renk: "red" },
-                  ],
-                }} />
-                <a href={`/dashboard/signallab/csp-screener?ticker=${c.ticker}${c.putWall ? `&maxStrike=${c.putWall}` : `&maxStrike=${c.conservative?.strike ?? ""}`}`}
-                  className="rounded-lg px-3 py-2 text-sm font-bold bg-[#ff7200] text-white hover:bg-[#ff8a2b] whitespace-nowrap transition-colors">
-                  CSP Tara →
-                </a>
-              </div>
-            </div>
-            );
-          })}
+          {sortedCards.map((c) => (
+            <AnomalyCardRow key={c.ticker} c={c} sortMode={sortMode} />
+          ))}
         </div>
       )}
 
@@ -226,6 +151,74 @@ export default function AnomalyRadarPage() {
           ⚠️ Radar eleme yapmaz — fırsatı ve riski sayılarla gösterir, karar senindir. P(assignment) çöküş SONRASI şişkin IV ile hesaplanır; piyasanın korkusu rakamların içindedir.
         </p>
       </div>
+    </div>
+  );
+}
+
+// eslint-disable-next-line
+function AnomalyCardRow({ c, sortMode }: { c: any; sortMode: "math" | "balanced" }) {
+  const [detayOpen, setDetayOpen] = useState(false);
+  const detayContent: DetailContent = {
+    title: `${c.ticker} — Anomali Analizi`,
+    logic: `Düşüş: ${(c.triggerDrop * 100).toFixed(1)}% (${c.trigger}) → ${c.sigmaMove.toFixed(1)}σ\n1g: ${(c.drop1d * 100).toFixed(1)}% · dün: ${(c.prevDayDrop * 100).toFixed(1)}% · 3g: ${(c.drop3d * 100).toFixed(1)}%\nHV20: ${(c.hv20 * 100).toFixed(0)}% · IV: %${c.ivPct.toFixed(0)} · IV/HV: ${c.ivHvRatio.toFixed(1)}x\nSektör (${c.trigger}): ${(c.sectorRel * 100).toFixed(1)}% → ${c.sectorLabel}\n5g: ${(c.dd5 * 100).toFixed(1)}% → ×${(1 + Math.abs(c.dd5)).toFixed(2)}${c.premiumFactor != null && c.premiumFactor < 1 ? ` · prim ×${c.premiumFactor.toFixed(2)}` : ""}\nSkor: ${c.opportunityScore.toFixed(2)} → ${c.displayScore}/100\nKalite: ${c.qualityScore ?? "?"}/100 (${c.qualitySource ?? "?"}) — ${(c.qualityWhy ?? []).join(", ")}\nDenge = ${c.displayScore} × ${c.qualityScore ?? "?"}/100 = ${c.balancedScore ?? "?"}`,
+    scenarios: [
+      { durum: "Fiyat toparlar", sonuc: `Prim cebinde — %${c.conservative?.annualizedYieldPct.toFixed(0) ?? "?"}/yıl`, renk: "green" },
+      { durum: "Strike kırılır", sonuc: `Sahiplik $${c.conservative?.effectiveCost.toFixed(1) ?? "?"}`, renk: "yellow" },
+      { durum: "Düşüş devam", sonuc: "Kayıp mümkün", renk: "red" },
+    ],
+  };
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-[#101013] p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        {/* LEFT: content */}
+        <div className="flex-1 min-w-0 space-y-1.5">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xl font-bold text-white">{c.ticker}</span>
+            <span className="text-lg font-bold text-white">${c.spot.toFixed(2)}</span>
+            <span className="bg-red-500/20 text-red-400 font-bold text-sm rounded px-2 py-0.5">{c.trigger} {(c.triggerDrop * 100).toFixed(1)}%</span>
+            <span className="text-xs font-bold text-white/70">
+              {c.trigger === "dün" && `bugün ${c.drop1d >= 0 ? "+" : ""}${(c.drop1d * 100).toFixed(1)}% (${c.drop1d >= 0 ? "toparlama" : "devam"})`}
+              {c.trigger === "bugün" && `5g: ${(c.dd5 * 100).toFixed(1)}%`}
+              {c.trigger === "3g" && `bugün: ${(c.drop1d * 100).toFixed(1)}% · 5g: ${(c.dd5 * 100).toFixed(1)}%`}
+            </span>
+            {c.trigger !== "bugün" && <span className="text-xs font-bold text-white/70">5g: {(c.dd5 * 100).toFixed(1)}%</span>}
+            <span className="font-bold text-white text-xs">{c.sigmaMove.toFixed(1)}σ</span>
+            <span className="bg-white/10 text-white/90 font-bold text-[11px] rounded px-1.5 py-0.5">{c.sectorLabel}</span>
+            <span className={`font-bold text-[11px] rounded px-1.5 py-0.5 ${c.ivHvRatio < 1 ? "bg-white/10 text-white/60" : "bg-white/10 text-white/90"}`}>IV/HV {c.ivHvRatio.toFixed(1)}x</span>
+            {c.earningsInWin && <span className="bg-white/10 text-white/90 font-bold text-[11px] rounded px-1.5 py-0.5">📊</span>}
+          </div>
+          {c.conservative && !c.aggressive && (
+            <div className="text-xs font-bold text-white/90 truncate">🛡 ${c.conservative.strike}P — ${c.conservative.premium.toFixed(2)} · %{c.conservative.annualizedYieldPct.toFixed(0)}/yıl · %{(c.conservative.buffer * 100).toFixed(0)} tampon</div>
+          )}
+          {c.conservative && c.aggressive && (
+            <div className="text-xs font-bold text-white/90 truncate">🛡 ${c.conservative.strike}P %{c.conservative.annualizedYieldPct.toFixed(0)}/yıl · ⚡ ${c.aggressive.strike}P %{c.aggressive.annualizedYieldPct.toFixed(0)}/yıl</div>
+          )}
+          {c.conservative && (
+            <div className="text-[11px] font-bold text-white/60 truncate">Plan B: ${c.conservative.effectiveCost.toFixed(2)} maliyet (%{(c.conservative.effectiveCostVsSpotPct * 100).toFixed(0)} iskonto)</div>
+          )}
+        </div>
+
+        {/* RIGHT: scores + buttons same row */}
+        <div className="flex items-center gap-3 shrink-0 ml-4">
+          <span className={`rounded-lg px-4 py-2 text-sm font-bold border-2 border-transparent h-12 flex items-center ${(c.qualityScore ?? 50) >= 65 ? "bg-emerald-500/15 text-emerald-400" : (c.qualityScore ?? 50) >= 40 ? "bg-yellow-500/15 text-yellow-400" : "bg-red-500/15 text-red-400"}`} title={(c.qualityWhy ?? []).join(", ")}>Kalite {c.qualityScore ?? "?"}</span>
+          <span className={`rounded-lg px-4 py-2 text-sm font-bold border-2 border-transparent h-12 flex items-center ${c.displayScore >= 65 ? "bg-emerald-500/15 text-emerald-400" : c.displayScore >= 40 ? "bg-yellow-500/15 text-yellow-400" : "bg-red-500/15 text-red-400"}`}>Fırsat {c.displayScore}</span>
+          <div className={`flex items-center justify-center rounded-lg px-6 h-12 border-2 border-transparent ${(() => { const v = sortMode === "balanced" ? (c.balancedScore ?? 0) : c.displayScore; return v >= 75 ? "bg-emerald-500/20 text-emerald-400" : v >= 50 ? "bg-yellow-500/20 text-yellow-400" : "bg-white/10 text-white/70"; })()}`}>
+            <span className="text-2xl font-bold leading-none">{sortMode === "balanced" ? (c.balancedScore ?? "?") : c.displayScore}</span>
+          </div>
+          <button onClick={() => setDetayOpen(!detayOpen)}
+            className="rounded-lg px-4 py-2 text-sm font-bold border-2 border-[#ff7200] text-[#ff7200] bg-transparent hover:bg-[#ff7200]/10 transition-colors h-12 flex items-center">
+            Detay {detayOpen ? "▾" : "▸"}
+          </button>
+          <a href={`/dashboard/signallab/csp-screener?ticker=${c.ticker}${c.putWall ? `&maxStrike=${c.putWall}` : `&maxStrike=${c.conservative?.strike ?? ""}`}`}
+            className="rounded-lg px-4 py-2 text-sm font-bold bg-[#ff7200] text-white hover:bg-[#ff8a2b] whitespace-nowrap transition-colors h-12 flex items-center">
+            CSP Tara
+          </a>
+        </div>
+      </div>
+
+      {/* Detay panel — full width below */}
+      {detayOpen && <DetailPanel content={detayContent} />}
     </div>
   );
 }
