@@ -140,15 +140,21 @@ export async function getSparkCloses(symbols: string[]): Promise<Map<string, num
       const { status, body } = curlFetch(url);
       if (status === 200) {
         const json = JSON.parse(body) as Record<string, unknown>;
-        // Shape: { spark: { result: [{ symbol, response: [{ indicators: { quote: [{ close }] } }] }] } }
-        // OR compact: { [symbol]: { close: [...] } }
         const sparkResult = (json as { spark?: { result?: Array<{ symbol: string; response?: Array<{ indicators?: { quote?: Array<{ close?: (number | null)[] }> } }> }> } })?.spark?.result;
         if (sparkResult) {
           for (const item of sparkResult) {
             const closes = item.response?.[0]?.indicators?.quote?.[0]?.close;
             if (closes) chunkResult.set(item.symbol, closes.filter((c): c is number => c != null));
           }
+        } else {
+          // Compact-map fallback: top-level { SYMBOL: { close: [...] } }
+          for (const sym of chunk) {
+            const entry = (json as Record<string, { close?: (number | null)[] }>)[sym];
+            if (entry?.close) chunkResult.set(sym, entry.close.filter((c): c is number => c != null));
+          }
         }
+      } else {
+        console.warn(`[getSparkCloses] HTTP ${status}: ${body.slice(0, 120)}`);
       }
     } catch { /* skip chunk on error */ }
 

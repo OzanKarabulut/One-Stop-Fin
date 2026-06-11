@@ -1209,7 +1209,7 @@ export const signallabRouter = router({
 
   // ═══ Anomali Radarı: anomalyScan ═══════════════════════════════════════════
   anomalyScan: publicProcedure
-    .input(z.object({ tickers: z.array(z.string()).max(300) }))
+    .input(z.object({ tickers: z.array(z.string()).max(300), debugTicker: z.string().optional() }))
     .query(async ({ input }) => {
       const { getSparkCloses } = await import("../services/market-data/yahoo");
       const { sectorEtfFor, SECTOR_ETF } = await import("@/lib/ticker-universe");
@@ -1248,11 +1248,9 @@ export const signallabRouter = router({
 
       // Stage 1 filter + near-misses
       interface Triggered { ticker: string; drop1d: number; prevDayDrop: number; drop3d: number; dd5: number; spot: number; trigger: "bugün" | "dün" | "3g"; triggerDrop: number; triggerDays: number; }
-      const triggered: Triggered[] = [];
-      const nearMissPool: { ticker: string; window: "bugün" | "dün" | "3g"; drop: number; threshold: number; proximity: number }[] = [];
-      for (const ticker of input.tickers) {
-        const closes = sparkData.get(ticker);
-        if (!closes || closes.length < 3) continue;
+      interface TickerMetrics { drop1d: number; prevDayDrop: number; drop3d: number; dd5: number; spot: number; trigger: "bugün" | "dün" | "3g" | null; triggerDrop: number; triggerDays: number; }
+
+      function computeTickerMetrics(closes: number[]): TickerMetrics {
         const last = closes[closes.length - 1];
         const drop1d = last / closes[closes.length - 2] - 1;
         const prevDayDrop = closes.length >= 3 ? closes[closes.length - 2] / closes[closes.length - 3] - 1 : 0;
@@ -1261,25 +1259,50 @@ export const signallabRouter = router({
         const by1d = drop1d <= -DROP_1D;
         const byPrev = prevDayDrop <= -DROP_1D;
         const by3d = drop3d <= -DROP_3D;
-        if (by1d || byPrev || by3d) {
-          const trigger = by1d ? "bugün" as const : byPrev ? "dün" as const : "3g" as const;
-          const triggerDrop = by1d ? drop1d : byPrev ? prevDayDrop : drop3d;
-          const triggerDays = trigger === "3g" ? 3 : 1;
-          triggered.push({ ticker, drop1d, prevDayDrop, drop3d, dd5, spot: last, trigger, triggerDrop, triggerDays });
+        const trigger = by1d ? "bugün" as const : byPrev ? "dün" as const : by3d ? "3g" as const : null;
+        const triggerDrop = by1d ? drop1d : byPrev ? prevDayDrop : drop3d;
+        const triggerDays = trigger === "3g" ? 3 : 1;
+        return { drop1d, prevDayDrop, drop3d, dd5, spot: last, trigger, triggerDrop, triggerDays };
+      }
+
+      const triggered: Triggered[] = [];
+      const nearMissPool: { ticker: string; window: "bugün" | "dün" | "3g"; drop: number; threshold: number; proximity: number }[] = [];
+      const skippedTickers: string[] = [];
+
+      for (const ticker of input.tickers) {
+        const closes = sparkData.get(ticker);
+        if (!closes || closes.length < 3) { skippedTickers.push(ticker); continue; }
+        const m = computeTickerMetrics(closes);
+        if (m.trigger) {
+          triggered.push({ ticker, drop1d: m.drop1d, prevDayDrop: m.prevDayDrop, drop3d: m.drop3d, dd5: m.dd5, spot: m.spot, trigger: m.trigger, triggerDrop: m.triggerDrop, triggerDays: m.triggerDays });
         } else {
-          const prox1d = drop1d / -DROP_1D;
-          const proxPrev = prevDayDrop / -DROP_1D;
-          const prox3d = closes.length >= 4 ? drop3d / -DROP_3D : 0;
+          const prox1d = m.drop1d / -DROP_1D;
+          const proxPrev = m.prevDayDrop / -DROP_1D;
+          const prox3d = closes.length >= 4 ? m.drop3d / -DROP_3D : 0;
           const proximity = Math.max(prox1d, proxPrev, prox3d);
           if (proximity > 0.3) {
             const best = prox1d >= proxPrev && prox1d >= prox3d ? "bugün" as const : proxPrev >= prox3d ? "dün" as const : "3g" as const;
-            const drop = best === "bugün" ? drop1d : best === "dün" ? prevDayDrop : drop3d;
+            const drop = best === "bugün" ? m.drop1d : best === "dün" ? m.prevDayDrop : m.drop3d;
             nearMissPool.push({ ticker, window: best, drop, threshold: best === "3g" ? -DROP_3D : -DROP_1D, proximity });
           }
         }
       }
       nearMissPool.sort((a, b) => b.proximity - a.proximity);
       const nearMisses = nearMissPool.slice(0, 5);
+
+      // Debug ticker
+      let debug: { ticker: string; inUniverse: boolean; sparkFound: boolean; closes: number[] | null; drop1d: number | null; prevDayDrop: number | null; drop3d: number | null; dd5: number | null; wouldTrigger: string | null } | undefined;
+      if (input.debugTicker) {
+        const dt = input.debugTicker.toUpperCase();
+        const closes = sparkData.get(dt) ?? null;
+        const inUniverse = input.tickers.includes(dt);
+        if (closes && closes.length >= 3) {
+          const m = computeTickerMetrics(closes);
+          debug = { ticker: dt, inUniverse, sparkFound: true, closes, drop1d: m.drop1d, prevDayDrop: m.prevDayDrop, drop3d: m.drop3d, dd5: m.dd5, wouldTrigger: m.trigger };
+        } else {
+          debug = { ticker: dt, inUniverse, sparkFound: !!closes, closes: closes ? [...closes] : null, drop1d: null, prevDayDrop: null, drop3d: null, dd5: null, wouldTrigger: null };
+        }
+      }
 
       const stage1Ms = Date.now() - stage1Start;
 
@@ -1542,7 +1565,7 @@ export const signallabRouter = router({
 
       return {
         cards, calibration,
-        meta: { scanned: input.tickers.length, stage1Ms, triggeredCount: triggered.length, nearMisses },
+        meta: { scanned: input.tickers.length, stage1Ms, triggeredCount: triggered.length, nearMisses, skipped: { count: skippedTickers.length, sample: skippedTickers.slice(0, 10) }, debug },
       };
     }),
 });

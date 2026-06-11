@@ -17,16 +17,17 @@ export default function AnomalyRadarPage() {
   } = useScanState({ prefix: "anomaly", defaultList: "", defaultBudget: 0, defaultChips: ["broad"] });
 
   const personalTickers = list.split(",").map(t => t.trim()).filter(Boolean);
-  const [queryTickers, setQueryTickers] = useState<string[] | null>(null);
+  const [debugTicker, setDebugTicker] = useState("");
+  const [queryInput, setQueryInput] = useState<{ tickers: string[]; debugTicker?: string } | null>(null);
 
   const { data, isFetching } = trpc.signallab.anomalyScan.useQuery(
-    { tickers: queryTickers! },
-    { enabled: !!queryTickers, refetchOnWindowFocus: false },
+    queryInput!,
+    { enabled: !!queryInput, refetchOnWindowFocus: false },
   );
 
   const handleScan = () => {
     const resolved = resolveTickers(activeChips, personalTickers, customTickers, EXTRA_CATS).slice(0, 300);
-    setQueryTickers(resolved);
+    setQueryInput({ tickers: resolved, debugTicker: debugTicker.trim() || undefined });
   };
 
   const resolvedCount = resolveTickers(activeChips, personalTickers, customTickers, EXTRA_CATS).length;
@@ -48,11 +49,25 @@ export default function AnomalyRadarPage() {
             className="bg-[#ff7200] text-white font-bold rounded-lg px-6 py-2.5 text-sm hover:bg-[#ff8a2b] transition-colors disabled:opacity-50">
             {isFetching ? "Taranıyor…" : "Radar Tara"}
           </button>
+          <input value={debugTicker} onChange={e => setDebugTicker(e.target.value.toUpperCase())} placeholder="Tanı" className="rounded-lg bg-[#1a1a1f] border border-white/10 px-3 py-2 font-bold text-white/90 w-20 text-sm" />
           <span className="text-sm font-bold text-white/70">
             {resolvedCount} hisse · Aşama 1 saniyeler, derin analiz sadece yakalananlara
           </span>
         </div>
       </div>
+
+      {/* Skipped warning */}
+      {data && data.meta.skipped.count > 0 && (
+        <p className="text-xs font-bold text-yellow-400 px-1">⚠ {data.meta.skipped.count} hisse spark verisi eksik/kısa: {data.meta.skipped.sample.join(", ")}{data.meta.skipped.count > 10 ? "…" : ""}</p>
+      )}
+
+      {/* Debug output */}
+      {data?.meta.debug && (
+        <details className="rounded-lg border border-white/10 bg-[#101013] p-3">
+          <summary className="font-bold text-white/90 text-sm cursor-pointer">Tanı: {data.meta.debug.ticker}</summary>
+          <pre className="mt-2 text-xs font-mono text-white/80 overflow-x-auto whitespace-pre-wrap">{JSON.stringify(data.meta.debug, null, 2)}</pre>
+        </details>
+      )}
 
       {/* Results */}
       {data && data.cards.length > 0 && (
