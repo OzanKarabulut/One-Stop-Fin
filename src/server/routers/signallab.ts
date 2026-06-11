@@ -1231,28 +1231,55 @@ export const signallabRouter = router({
 
       // Compute ETF drops for sector-relative
       const etfDrop1d = new Map<string, number>();
+      const etfPrevDrop = new Map<string, number>();
+      const etfDrop3d = new Map<string, number>();
       for (const etf of etfSet) {
         const closes = sparkData.get(etf);
         if (closes && closes.length >= 2) {
           etfDrop1d.set(etf, closes[closes.length - 1] / closes[closes.length - 2] - 1);
         }
-      }
-
-      // Stage 1 filter
-      interface Triggered { ticker: string; drop1d: number; drop3d: number; spot: number; trigger: "1g" | "3g"; triggerDrop: number; triggerDays: number; }
-      const triggered: Triggered[] = [];
-      for (const ticker of input.tickers) {
-        const closes = sparkData.get(ticker);
-        if (!closes || closes.length < 4) continue;
-        const spot = closes[closes.length - 1];
-        const drop1d = spot / closes[closes.length - 2] - 1;
-        const drop3d = spot / closes[closes.length - 4] - 1;
-        const by1d = drop1d <= -DROP_1D;
-        const by3d = drop3d <= -DROP_3D;
-        if (by1d || by3d) {
-          triggered.push({ ticker, drop1d, drop3d, spot, trigger: by1d ? "1g" : "3g", triggerDrop: by1d ? drop1d : drop3d, triggerDays: by1d ? 1 : 3 });
+        if (closes && closes.length >= 3) {
+          etfPrevDrop.set(etf, closes[closes.length - 2] / closes[closes.length - 3] - 1);
+        }
+        if (closes && closes.length >= 4) {
+          etfDrop3d.set(etf, closes[closes.length - 1] / closes[closes.length - 4] - 1);
         }
       }
+
+      // Stage 1 filter + near-misses
+      interface Triggered { ticker: string; drop1d: number; prevDayDrop: number; drop3d: number; dd5: number; spot: number; trigger: "bugün" | "dün" | "3g"; triggerDrop: number; triggerDays: number; }
+      const triggered: Triggered[] = [];
+      const nearMissPool: { ticker: string; window: "bugün" | "dün" | "3g"; drop: number; threshold: number; proximity: number }[] = [];
+      for (const ticker of input.tickers) {
+        const closes = sparkData.get(ticker);
+        if (!closes || closes.length < 3) continue;
+        const last = closes[closes.length - 1];
+        const drop1d = last / closes[closes.length - 2] - 1;
+        const prevDayDrop = closes.length >= 3 ? closes[closes.length - 2] / closes[closes.length - 3] - 1 : 0;
+        const drop3d = closes.length >= 4 ? last / closes[closes.length - 4] - 1 : 0;
+        const dd5 = last / Math.max(...closes.slice(-5)) - 1;
+        const by1d = drop1d <= -DROP_1D;
+        const byPrev = prevDayDrop <= -DROP_1D;
+        const by3d = drop3d <= -DROP_3D;
+        if (by1d || byPrev || by3d) {
+          const trigger = by1d ? "bugün" as const : byPrev ? "dün" as const : "3g" as const;
+          const triggerDrop = by1d ? drop1d : byPrev ? prevDayDrop : drop3d;
+          const triggerDays = trigger === "3g" ? 3 : 1;
+          triggered.push({ ticker, drop1d, prevDayDrop, drop3d, dd5, spot: last, trigger, triggerDrop, triggerDays });
+        } else {
+          const prox1d = drop1d / -DROP_1D;
+          const proxPrev = prevDayDrop / -DROP_1D;
+          const prox3d = closes.length >= 4 ? drop3d / -DROP_3D : 0;
+          const proximity = Math.max(prox1d, proxPrev, prox3d);
+          if (proximity > 0.3) {
+            const best = prox1d >= proxPrev && prox1d >= prox3d ? "bugün" as const : proxPrev >= prox3d ? "dün" as const : "3g" as const;
+            const drop = best === "bugün" ? drop1d : best === "dün" ? prevDayDrop : drop3d;
+            nearMissPool.push({ ticker, window: best, drop, threshold: best === "3g" ? -DROP_3D : -DROP_1D, proximity });
+          }
+        }
+      }
+      nearMissPool.sort((a, b) => b.proximity - a.proximity);
+      const nearMisses = nearMissPool.slice(0, 5);
 
       const stage1Ms = Date.now() - stage1Start;
 
@@ -1265,8 +1292,8 @@ export const signallabRouter = router({
       function release() { sem.running--; const next = sem.queue.shift(); if (next) { sem.running++; next(); } }
 
       interface AnomalyCard {
-        ticker: string; spot: number; drop1d: number; drop3d: number;
-        trigger: "1g" | "3g"; triggerDrop: number; triggerDays: number;
+        ticker: string; spot: number; drop1d: number; prevDayDrop: number; drop3d: number; dd5: number;
+        trigger: "bugün" | "dün" | "3g"; triggerDrop: number; triggerDays: number;
         hv20: number; sigmaMove: number; sectorRel: number; sectorLabel: string;
         ivPct: number; ivHvRatio: number; ivPercentile: number | null; ivPercentilePrev: number | null;
         earningsInWin: boolean | null;
@@ -1298,8 +1325,8 @@ export const signallabRouter = router({
           const windowSigma = hv20 * Math.sqrt(t.triggerDays / 252);
           const sigmaMove = Math.abs(t.triggerDrop) / windowSigma;
           const sectorEtf = sectorEtfFor(t.ticker);
-          const sectorDrop = etfDrop1d.get(sectorEtf) ?? 0;
-          const sectorRel = t.drop1d - sectorDrop;
+          const sectorDrop = (t.trigger === "3g" ? etfDrop3d : t.trigger === "dün" ? etfPrevDrop : etfDrop1d).get(sectorEtf) ?? 0;
+          const sectorRel = t.triggerDrop - sectorDrop;
           const sectorLabel = sectorRel <= -0.04 ? "şirket-ağırlıklı" : "sektörle birlikte";
 
           // Expiry: nearest with DTE in [5,15], fallback nearest ≥5
@@ -1428,10 +1455,10 @@ export const signallabRouter = router({
             }
           }
 
-          const opportunityScore = ivHvRatio * sigmaMove;
+          const opportunityScore = ivHvRatio * sigmaMove * (1 + Math.abs(t.dd5));
 
           cards.push({
-            ticker: t.ticker, spot, drop1d: t.drop1d, drop3d: t.drop3d,
+            ticker: t.ticker, spot, drop1d: t.drop1d, prevDayDrop: t.prevDayDrop, drop3d: t.drop3d, dd5: t.dd5,
             trigger: t.trigger, triggerDrop: t.triggerDrop, triggerDays: t.triggerDays,
             hv20, sigmaMove, sectorRel, sectorLabel, ivPct, ivHvRatio,
             ivPercentile, ivPercentilePrev, earningsInWin, putWall,
@@ -1515,7 +1542,7 @@ export const signallabRouter = router({
 
       return {
         cards, calibration,
-        meta: { scanned: input.tickers.length, stage1Ms, triggeredCount: triggered.length },
+        meta: { scanned: input.tickers.length, stage1Ms, triggeredCount: triggered.length, nearMisses },
       };
     }),
 });

@@ -65,11 +65,14 @@ export default function AnomalyRadarPage() {
                 <span className="text-xl font-bold text-white">{c.ticker}</span>
                 <span className="text-lg font-bold text-white">${c.spot.toFixed(2)}</span>
                 <span className="bg-red-500/20 text-red-400 font-bold text-sm rounded px-2 py-0.5">
-                  {(c.triggerDrop * 100).toFixed(1)}% / {c.trigger}
+                  {c.trigger} {(c.triggerDrop * 100).toFixed(1)}%
                 </span>
                 <span className="text-xs font-bold text-white/70">
-                  ({c.trigger === "1g" ? `3g: ${(c.drop3d * 100).toFixed(1)}%` : `1g: ${(c.drop1d * 100).toFixed(1)}%`})
+                  {c.trigger === "dün" && `bugün ${c.drop1d >= 0 ? "+" : ""}${(c.drop1d * 100).toFixed(1)}% (${c.drop1d >= 0 ? "toparlama" : "devam"})`}
+                  {c.trigger === "bugün" && `5g: ${(c.dd5 * 100).toFixed(1)}%`}
+                  {c.trigger === "3g" && `bugün: ${(c.drop1d * 100).toFixed(1)}% · 5g: ${(c.dd5 * 100).toFixed(1)}%`}
                 </span>
+                {c.trigger !== "bugün" && <span className="text-xs font-bold text-white/70">5g: {(c.dd5 * 100).toFixed(1)}%</span>}
                 <span className="font-bold text-white text-sm">{c.sigmaMove.toFixed(1)}σ hareket</span>
                 <span className="bg-white/10 text-white/90 font-bold text-xs rounded px-2 py-0.5">{c.sectorLabel}</span>
                 <span className="bg-white/10 text-white/90 font-bold text-xs rounded px-2 py-0.5">IV/HV {c.ivHvRatio.toFixed(1)}x</span>
@@ -103,7 +106,7 @@ export default function AnomalyRadarPage() {
               <div className="flex items-center gap-3">
                 <DetayButton content={{
                   title: `${c.ticker} — Anomali Analizi`,
-                  logic: `Düşüş: ${(c.triggerDrop * 100).toFixed(1)}% (${c.trigger}) → ${c.sigmaMove.toFixed(1)}σ (${c.trigger} penceresinin σ'sı = HV20·√(${c.triggerDays}/252))\n1g: ${(c.drop1d * 100).toFixed(1)}% · 3g: ${(c.drop3d * 100).toFixed(1)}%\nHV20: ${(c.hv20 * 100).toFixed(0)}%\nSektör Relatif: ${(c.sectorRel * 100).toFixed(1)}% → ${c.sectorLabel}\nIV: %${c.ivPct.toFixed(0)} vs HV20: %${(c.hv20 * 100).toFixed(0)} → IV/HV: ${c.ivHvRatio.toFixed(1)}x\nŞişkin IV = yüksek prim. Çöküş SONRASI korku fiyatlanmış.\nAssignment = plan B: hisseyi iskontolu sahiplenirsin.`,
+                  logic: `Düşüş: ${(c.triggerDrop * 100).toFixed(1)}% (${c.trigger}) → ${c.sigmaMove.toFixed(1)}σ (${c.trigger} penceresinin σ'sı = HV20·√(${c.triggerDays}/252))\n1g: ${(c.drop1d * 100).toFixed(1)}% · dün: ${(c.prevDayDrop * 100).toFixed(1)}% · 3g: ${(c.drop3d * 100).toFixed(1)}%\nHV20: ${(c.hv20 * 100).toFixed(0)}%\nSektör relatif (${c.trigger}): ${(c.sectorRel * 100).toFixed(1)}% → ${c.sectorLabel}\nIV: %${c.ivPct.toFixed(0)} vs HV20: %${(c.hv20 * 100).toFixed(0)} → IV/HV: ${c.ivHvRatio.toFixed(1)}x\nSkor çarpanı: 5 günlük drawdown ${(c.dd5 * 100).toFixed(1)}% → ×${(1 + Math.abs(c.dd5)).toFixed(2)}\nŞişkin IV = yüksek prim. Çöküş SONRASI korku fiyatlanmış.\nAssignment = plan B: hisseyi iskontolu sahiplenirsin.`,
                   scenarios: [
                     { durum: "Fiyat toparlar", sonuc: `Prim cebinde kalır — yıllık %${c.conservative?.annualizedYieldPct.toFixed(0) ?? "?"} getiri`, renk: "green" },
                     { durum: "Fiyat düşer, strike kırılır", sonuc: `Hisse $${c.conservative?.effectiveCost.toFixed(1) ?? "?"} maliyetle sahiplenilir (bugünden %${((c.conservative?.effectiveCostVsSpotPct ?? 0) * 100).toFixed(0)} iskonto)`, renk: "yellow" },
@@ -120,11 +123,23 @@ export default function AnomalyRadarPage() {
         </div>
       )}
 
+      {/* Near misses — shown always when data exists */}
+      {data && data.meta.nearMisses.length > 0 && (
+        <p className="text-sm font-bold text-white/70 px-1">
+          Eşiğe en yakınlar:{" "}
+          {data.meta.nearMisses.map((nm, i) => (
+            <span key={i} title={`eşik: ${(nm.threshold * 100).toFixed(0)}%`}>
+              {i > 0 && " · "}{nm.ticker} {(nm.drop * 100).toFixed(1)}%/{nm.window}
+            </span>
+          ))}
+        </p>
+      )}
+
       {/* Empty state */}
       {data && data.cards.length === 0 && (
         <div className="rounded-lg border border-white/10 bg-[#101013] p-6 text-center">
           <p className="text-sm font-bold text-white/90">
-            Bugün radar sessiz — {data.meta.scanned} hissede %7+/1g veya %12+/3g düşüş yok.
+            Bugün radar sessiz — {data.meta.scanned} hissede %7+/1g (bugün veya dün) veya %12+/3g düşüş yok.
           </p>
           <p className="text-xs font-bold text-white/60 mt-2">
             Tarama: {data.meta.scanned} hisse · {data.meta.stage1Ms}ms · {data.meta.triggeredCount} tetiklendi
