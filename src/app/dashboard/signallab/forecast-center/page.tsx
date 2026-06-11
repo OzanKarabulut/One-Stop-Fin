@@ -7,7 +7,9 @@ import { ComposedChart, Area, Line, XAxis, YAxis, Tooltip, ReferenceLine, Respon
 export default function ForecastCenterPage() {
   const [ticker, setTicker] = useState("");
   const [targetDate, setTargetDate] = useState("");
-  const [mode, setMode] = useState<"single" | "week">("single");
+  const [mode, setMode] = useState<"single" | "week" | "range">("single");
+  const [rangeStart, setRangeStart] = useState("");
+  const [rangeEnd, setRangeEnd] = useState("");
   const [queryInput, setQueryInput] = useState<{ ticker: string; targetDate: string; mode: "single" | "week" } | null>(null);
 
   const { data, error, isFetching, refetch } = trpc.signallab.forecast.useQuery(
@@ -18,7 +20,10 @@ export default function ForecastCenterPage() {
   const handleSubmit = () => {
     if (!ticker) return;
     if (mode === "single" && !targetDate) return;
-    setQueryInput({ ticker: ticker.toUpperCase(), targetDate: mode === "week" ? new Date().toISOString().slice(0, 10) : targetDate, mode });
+    if (mode === "range" && (!rangeStart || !rangeEnd)) return;
+    const effectiveDate = mode === "single" ? targetDate : mode === "range" ? rangeEnd : new Date().toISOString().slice(0, 10);
+    const effectiveMode = mode === "range" ? "week" as const : mode === "single" ? "single" as const : "week" as const;
+    setQueryInput({ ticker: ticker.toUpperCase(), targetDate: effectiveDate, mode: effectiveMode });
     setTimeout(() => refetch(), 0);
   };
 
@@ -42,14 +47,38 @@ export default function ForecastCenterPage() {
               className={`rounded-lg px-3 py-2 text-sm font-bold transition-colors ${mode === "week" ? "bg-[#ff7200] text-white" : "bg-white/10 text-white/90"}`}>
               1 Haftalık
             </button>
+            <button onClick={() => setMode("range")}
+              className={`rounded-lg px-3 py-2 text-sm font-bold transition-colors ${mode === "range" ? "bg-[#ff7200] text-white" : "bg-white/10 text-white/90"}`}>
+              Aralık
+            </button>
           </div>
           {mode === "single" && (
             <input
               type="date"
               value={targetDate}
               onChange={(e) => setTargetDate(e.target.value)}
-              className="rounded-lg bg-[#1a1a1f] border border-white/10 px-3 py-2 font-bold text-white/90"
+              style={{ colorScheme: "dark" }}
+              className="rounded-lg bg-[#1a1a1f] border border-white/10 px-3 py-2 font-bold text-white/90 cursor-pointer"
             />
+          )}
+          {mode === "range" && (
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={rangeStart}
+                onChange={(e) => setRangeStart(e.target.value)}
+                style={{ colorScheme: "dark" }}
+                className="rounded-lg bg-[#1a1a1f] border border-white/10 px-3 py-2 font-bold text-white/90 cursor-pointer"
+              />
+              <span className="text-sm font-bold text-white/90">→</span>
+              <input
+                type="date"
+                value={rangeEnd}
+                onChange={(e) => setRangeEnd(e.target.value)}
+                style={{ colorScheme: "dark" }}
+                className="rounded-lg bg-[#1a1a1f] border border-white/10 px-3 py-2 font-bold text-white/90 cursor-pointer"
+              />
+            </div>
           )}
           <button
             onClick={handleSubmit}
@@ -65,23 +94,38 @@ export default function ForecastCenterPage() {
       {/* ═══ WEEK MODE RESULTS ═══ */}
       {data && data.mode === "week" && (
         <>
-          {/* Cone Chart */}
-          <div className="rounded-lg border border-white/10 bg-[#101013] p-4">
-            <div className="font-bold text-white/90 text-sm mb-2">5 Günlük Tahmin Konisi (1σ Bandı)</div>
-            <ResponsiveContainer width="100%" height={280}>
-              <ComposedChart data={data.days.map(d => ({ date: d.date.slice(5), lower: d.band[0], upper: d.band[1], point: d.point.price }))} margin={{ top: 10, right: 20, bottom: 20, left: 20 }}>
-                <XAxis dataKey="date" tick={{ fill: "#aaa", fontSize: 11, fontWeight: "bold" }} />
-                <YAxis domain={["auto", "auto"]} tick={{ fill: "#aaa", fontSize: 11, fontWeight: "bold" }} />
-                <Tooltip contentStyle={{ background: "#1a1a1f", border: "1px solid rgba(255,255,255,0.1)", fontWeight: "bold" }} />
-                <Area type="monotone" dataKey="upper" stroke="none" fill="#ff720030" />
-                <Area type="monotone" dataKey="lower" stroke="none" fill="#101013" />
-                <Line type="monotone" dataKey="point" stroke="#ff7200" strokeWidth={2} dot={{ fill: "#ff7200", r: 4 }} label={{ fill: "#ff7200", fontSize: 10, fontWeight: "bold", position: "top", formatter: (v: number) => `$${v.toFixed(1)}` }} />
-                {data.gex.putWall && <ReferenceLine y={data.gex.putWall} stroke="#ef4444" strokeDasharray="3 3" label={{ value: "PW", fill: "#ef4444", fontSize: 10, fontWeight: "bold" }} />}
-                {data.gex.callWall && <ReferenceLine y={data.gex.callWall} stroke="#22c55e" strokeDasharray="3 3" label={{ value: "CW", fill: "#22c55e", fontSize: 10, fontWeight: "bold" }} />}
-                {data.days.map((d, i) => d.events.length > 0 ? <ReferenceLine key={`ev-${i}`} x={d.date.slice(5)} stroke="#fbbf24" strokeDasharray="2 2" /> : null)}
-                {data.days.map((d, i) => d.isExpiryDay ? <ReferenceLine key={`exp-${i}`} x={d.date.slice(5)} stroke="#a855f7" strokeDasharray="4 2" label={{ value: "OPEX", fill: "#a855f7", fontSize: 9, fontWeight: "bold" }} /> : null)}
-              </ComposedChart>
-            </ResponsiveContainer>
+          {/* Cone Charts: 2/5 simple price path + 3/5 band chart */}
+          <div className="grid grid-cols-5 gap-3">
+            {/* Left 2/5: Simple price line (no band, just daily points) */}
+            <div className="col-span-2 rounded-lg border border-white/10 bg-[#101013] p-3">
+              <div className="font-bold text-white text-xs mb-2">Fiyat Yolu</div>
+              <ResponsiveContainer width="100%" height={240}>
+                <ComposedChart data={data.days.map(d => ({ date: d.date.slice(8), point: d.point.price }))} margin={{ top: 20, right: 30, bottom: 10, left: 10 }}>
+                  <XAxis dataKey="date" tick={{ fill: "#fff", fontSize: 11, fontWeight: "bold" }} axisLine={{ stroke: "#fff", strokeWidth: 2 }} tickLine={{ stroke: "#fff" }} />
+                  <YAxis domain={[(dataMin: number) => Math.floor(dataMin * 0.995), (dataMax: number) => Math.ceil(dataMax * 1.005)]} tick={{ fill: "#fff", fontSize: 11, fontWeight: "bold" }} width={45} axisLine={{ stroke: "#fff", strokeWidth: 2 }} tickLine={{ stroke: "#fff" }} />
+                  <Line type="monotone" dataKey="point" stroke="#ff7200" strokeWidth={3} dot={{ fill: "#ffffff", r: 5, strokeWidth: 2, stroke: "#ff7200" }} label={{ fill: "#ffffff", fontSize: 12, fontWeight: "bold", position: "top", offset: 10, formatter: (v: number) => `$${v.toFixed(1)}` }} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Right 3/5: Full band chart */}
+            <div className="col-span-3 rounded-lg border border-white/10 bg-[#101013] p-3">
+              <div className="font-bold text-white text-xs mb-2">1σ Bant + Yapısal Seviyeler</div>
+              <ResponsiveContainer width="100%" height={240}>
+                <ComposedChart data={data.days.map(d => ({ date: d.date.slice(5), lower: d.band[0], upper: d.band[1], point: d.point.price }))} margin={{ top: 10, right: 20, bottom: 10, left: 20 }}>
+                  <XAxis dataKey="date" tick={{ fill: "#fff", fontSize: 11, fontWeight: "bold" }} axisLine={{ stroke: "#fff", strokeWidth: 2 }} tickLine={{ stroke: "#fff" }} />
+                  <YAxis domain={[(dataMin: number) => Math.floor(dataMin * 0.98), (dataMax: number) => Math.ceil(dataMax * 1.02)]} tick={{ fill: "#fff", fontSize: 11, fontWeight: "bold" }} axisLine={{ stroke: "#fff", strokeWidth: 2 }} tickLine={{ stroke: "#fff" }} />
+                  <Tooltip contentStyle={{ background: "#1a1a1f", border: "1px solid rgba(255,255,255,0.1)", fontWeight: "bold" }} />
+                  <Area type="monotone" dataKey="upper" stroke="none" fill="#ff720030" />
+                  <Area type="monotone" dataKey="lower" stroke="none" fill="#101013" />
+                  <Line type="monotone" dataKey="point" stroke="#ff7200" strokeWidth={2} dot={{ fill: "#ff7200", r: 4 }} />
+                  {data.gex.putWall && <ReferenceLine y={data.gex.putWall} stroke="#ef4444" strokeDasharray="3 3" ifOverflow="discard" label={{ value: "PW", fill: "#ef4444", fontSize: 10, fontWeight: "bold" }} />}
+                  {data.gex.callWall && <ReferenceLine y={data.gex.callWall} stroke="#22c55e" strokeDasharray="3 3" ifOverflow="discard" label={{ value: "CW", fill: "#22c55e", fontSize: 10, fontWeight: "bold" }} />}
+                  {data.days.map((d, i) => d.events.length > 0 ? <ReferenceLine key={`ev-${i}`} x={d.date.slice(5)} stroke="#fbbf24" strokeDasharray="2 2" /> : null)}
+                  {data.days.map((d, i) => d.isExpiryDay ? <ReferenceLine key={`exp-${i}`} x={d.date.slice(5)} stroke="#a855f7" strokeDasharray="4 2" label={{ value: "OPEX", fill: "#a855f7", fontSize: 9, fontWeight: "bold" }} /> : null)}
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
           </div>
 
           {/* 5-row table */}
@@ -174,7 +218,7 @@ export default function ForecastCenterPage() {
               <ResponsiveContainer width="100%" height={280}>
                 <ComposedChart data={data.cone} margin={{ top: 10, right: 20, bottom: 20, left: 20 }}>
                   <XAxis dataKey="date" tick={{ fill: "#aaa", fontSize: 10, fontWeight: "bold" }} angle={-45} textAnchor="end" height={50} />
-                  <YAxis domain={["auto", "auto"]} tick={{ fill: "#aaa", fontSize: 11, fontWeight: "bold" }} />
+                  <YAxis domain={[(dataMin: number) => Math.floor(dataMin * 0.98), (dataMax: number) => Math.ceil(dataMax * 1.02)]} tick={{ fill: "#aaa", fontSize: 11, fontWeight: "bold" }} />
                   <Tooltip contentStyle={{ background: "#1a1a1f", border: "1px solid rgba(255,255,255,0.1)", fontWeight: "bold" }} />
                   <Area type="monotone" dataKey="upper" stroke="none" fill="#ff720030" />
                   <Area type="monotone" dataKey="lower" stroke="none" fill="#101013" />
