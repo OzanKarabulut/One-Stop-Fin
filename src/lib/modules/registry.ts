@@ -39,6 +39,7 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
     implemented: true,
     items: [
       { href: "/dashboard/signallab/csp-screener", labelKey: "modules.signallab.csp", icon: Shield },
+      { href: "/dashboard/signallab/anomaly-radar", labelKey: "modules.signallab.anomalyRadar", icon: Zap },
       { href: "/dashboard/signallab/ai-strategy", labelKey: "modules.signallab.aiStrategy", icon: Brain },
       { href: "/dashboard/signallab/vol-console", labelKey: "modules.signallab.volConsole", icon: Activity },
       { href: "/dashboard/signallab/forecast-center", labelKey: "modules.signallab.forecast", icon: Crosshair },
@@ -46,7 +47,6 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
       { href: "/dashboard/signallab/manual", labelKey: "modules.signallab.manual", icon: PenTool },
       { href: "/dashboard/signallab/market-overview", labelKey: "modules.signallab.market", icon: Globe },
       { href: "/dashboard/signallab/watchlist", labelKey: "modules.signallab.watchlist", icon: Eye },
-      { href: "/dashboard/signallab/anomaly-radar", labelKey: "modules.signallab.anomalyRadar", icon: Zap },
     ],
   },
   {

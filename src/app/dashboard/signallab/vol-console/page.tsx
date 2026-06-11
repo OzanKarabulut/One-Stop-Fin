@@ -130,13 +130,12 @@ function VolConsoleInner() {
   const {
     list, setList, customTickers, setCustomTickers,
     editingList, setEditingList,
+    activeChips, setActiveChips,
   } = useScanState({ prefix: "csp", defaultList: DEFAULT_CSP_LIST, defaultBudget: 0 });
   const [dte, setDte] = useState(30);
   const [scanning, setScanning] = useState(false);
   const [openDetails, setOpenDetails] = useState<Record<string, boolean>>({});
   const toggleDetail = useCallback((t: string) => setOpenDetails(prev => ({ ...prev, [t]: !prev[t] })), []);
-
-  const [activeChips, setActiveChips] = useState<string[]>(["listem"]);
 
   const personalTickers = list.split(",").map(t => t.trim()).filter(Boolean);
   const resolvedTickers = resolveTickers(activeChips, personalTickers, customTickers);

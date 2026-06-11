@@ -306,14 +306,13 @@ function CSPScreenerInner() {
     fridays, list: cspList, setList: setCspList,
     customTickers, setCustomTickers, budget, setBudget,
     expiry, setExpiry, editingList, setEditingList,
+    activeChips, setActiveChips,
   } = useScanState({ prefix: "csp", defaultList: DEFAULT_CSP_LIST, defaultBudget: 250000 });
   const [minOI, setMinOI] = useState(0);
   const [sortKey, setSortKey] = useState<SortKey>("score");
   const [hideK4, setHideK4] = useState(false);
   const [basket, setBasket] = useState<BasketItem[]>([]);
   const [scanning, setScanning] = useState(false);
-
-  const [activeChips, setActiveChips] = useState<string[]>(["listem"]);
 
   const personalTickers = cspList.split(",").map(t => t.trim()).filter(Boolean);
   const resolvedTickers = resolveTickers(activeChips, personalTickers, customTickers);

@@ -150,6 +150,7 @@ model AnomalyLog {
   expiry                DateTime
   spot                  Float
   dropPct               Float
+  triggerWindow         String   @default("1g")
   sigmaMove             Float
   sectorRel             Float
   ivHvRatio             Float

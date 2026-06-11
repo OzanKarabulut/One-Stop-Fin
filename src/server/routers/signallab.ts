@@ -1239,7 +1239,7 @@ export const signallabRouter = router({
       }
 
       // Stage 1 filter
-      interface Triggered { ticker: string; drop1d: number; drop3d: number; spot: number; }
+      interface Triggered { ticker: string; drop1d: number; drop3d: number; spot: number; trigger: "1g" | "3g"; triggerDrop: number; triggerDays: number; }
       const triggered: Triggered[] = [];
       for (const ticker of input.tickers) {
         const closes = sparkData.get(ticker);
@@ -1247,8 +1247,10 @@ export const signallabRouter = router({
         const spot = closes[closes.length - 1];
         const drop1d = spot / closes[closes.length - 2] - 1;
         const drop3d = spot / closes[closes.length - 4] - 1;
-        if (drop1d <= -DROP_1D || drop3d <= -DROP_3D) {
-          triggered.push({ ticker, drop1d, drop3d, spot });
+        const by1d = drop1d <= -DROP_1D;
+        const by3d = drop3d <= -DROP_3D;
+        if (by1d || by3d) {
+          triggered.push({ ticker, drop1d, drop3d, spot, trigger: by1d ? "1g" : "3g", triggerDrop: by1d ? drop1d : drop3d, triggerDays: by1d ? 1 : 3 });
         }
       }
 
@@ -1264,6 +1266,7 @@ export const signallabRouter = router({
 
       interface AnomalyCard {
         ticker: string; spot: number; drop1d: number; drop3d: number;
+        trigger: "1g" | "3g"; triggerDrop: number; triggerDays: number;
         hv20: number; sigmaMove: number; sectorRel: number; sectorLabel: string;
         ivPct: number; ivHvRatio: number; ivPercentile: number | null; ivPercentilePrev: number | null;
         earningsInWin: boolean | null;
@@ -1291,7 +1294,9 @@ export const signallabRouter = router({
           const hv20 = historicalVol(closes, 20);
           if (!hv20 || hv20 <= 0) return;
 
-          const sigmaMove = Math.abs(t.drop1d) / (hv20 / Math.sqrt(252));
+          // sigma of the triggering window: hv20 scaled to triggerDays
+          const windowSigma = hv20 * Math.sqrt(t.triggerDays / 252);
+          const sigmaMove = Math.abs(t.triggerDrop) / windowSigma;
           const sectorEtf = sectorEtfFor(t.ticker);
           const sectorDrop = etfDrop1d.get(sectorEtf) ?? 0;
           const sectorRel = t.drop1d - sectorDrop;
@@ -1427,6 +1432,7 @@ export const signallabRouter = router({
 
           cards.push({
             ticker: t.ticker, spot, drop1d: t.drop1d, drop3d: t.drop3d,
+            trigger: t.trigger, triggerDrop: t.triggerDrop, triggerDays: t.triggerDays,
             hv20, sigmaMove, sectorRel, sectorLabel, ivPct, ivHvRatio,
             ivPercentile, ivPercentilePrev, earningsInWin, putWall,
             expiry: bestExpiry, dte, conservative, aggressive, opportunityScore,
@@ -1438,11 +1444,11 @@ export const signallabRouter = router({
               where: { ticker_expiry_detectedOnDay: { ticker: t.ticker, expiry: new Date(bestExpiry), detectedOnDay: today } },
               create: {
                 ticker: t.ticker, detectedOnDay: today, expiry: new Date(bestExpiry),
-                spot, dropPct: t.drop1d, sigmaMove, sectorRel, ivHvRatio,
+                spot, dropPct: t.triggerDrop, triggerWindow: t.trigger, sigmaMove, sectorRel, ivHvRatio,
                 strikeConservative: conservative?.strike ?? 0, premiumConservative: conservative?.premium ?? 0,
                 strikeAggressive: aggressive?.strike ?? 0, premiumAggressive: aggressive?.premium ?? 0,
               },
-              update: { spot, dropPct: t.drop1d, sigmaMove, sectorRel, ivHvRatio },
+              update: { spot, dropPct: t.triggerDrop, triggerWindow: t.trigger, sigmaMove, sectorRel, ivHvRatio },
             });
           } catch { /* never break */ }
         } catch { /* skip ticker */ }
@@ -1478,7 +1484,7 @@ export const signallabRouter = router({
       cards.sort((a, b) => b.opportunityScore - a.opportunityScore);
 
       // Calibration stats
-      let calibration: { total: number; maxKar: number; assignment: number; bySigma: { low: { total: number; maxKar: number }; high: { total: number; maxKar: number } }; bySector: { company: { total: number; maxKar: number }; sector: { total: number; maxKar: number } } } | null = null;
+      let calibration: { total: number; maxKar: number; assignment: number; bySigma: { low: { total: number; maxKar: number }; high: { total: number; maxKar: number } }; bySector: { company: { total: number; maxKar: number }; sector: { total: number; maxKar: number } }; byTrigger: { d1: { total: number; maxKar: number }; d3: { total: number; maxKar: number } } } | null = null;
       try {
         const settled = await db.anomalyLog.findMany({ where: { outcome: { not: null } } });
         if (settled.length > 0) {
@@ -1487,6 +1493,8 @@ export const signallabRouter = router({
           const lowSigma = settled.filter(s => s.sigmaMove < 3);
           const company = settled.filter(s => s.sectorRel <= -0.04);
           const sector = settled.filter(s => s.sectorRel > -0.04);
+          const d1 = settled.filter(s => s.triggerWindow === "1g");
+          const d3 = settled.filter(s => s.triggerWindow === "3g");
           calibration = {
             total: settled.length, maxKar, assignment: settled.length - maxKar,
             bySigma: {
@@ -1496,6 +1504,10 @@ export const signallabRouter = router({
             bySector: {
               company: { total: company.length, maxKar: company.filter(s => s.outcome === "MAX_KAR").length },
               sector: { total: sector.length, maxKar: sector.filter(s => s.outcome === "MAX_KAR").length },
+            },
+            byTrigger: {
+              d1: { total: d1.length, maxKar: d1.filter(s => s.outcome === "MAX_KAR").length },
+              d3: { total: d3.length, maxKar: d3.filter(s => s.outcome === "MAX_KAR").length },
             },
           };
         }

@@ -1,19 +1,22 @@
 "use client";
 
-import { useState } from "react";
 import { trpc } from "@/lib/trpc/client";
 import { TickerChips, resolveTickers } from "@/components/ui/TickerChips";
 import { DetayButton } from "@/components/ui/DetailPanel";
 import { BROAD_UNIVERSE } from "@/lib/ticker-universe";
 import type { TickerCategory } from "@/lib/ticker-universe";
+import { useScanState } from "@/hooks/useScanState";
+import { useState } from "react";
 
 const EXTRA_CATS: TickerCategory[] = [{ id: "broad", label: "Geniş Evren", tickers: BROAD_UNIVERSE }];
 
 export default function AnomalyRadarPage() {
-  const [activeIds, setActiveIds] = useState<string[]>(["broad"]);
-  const [personalTickers, setPersonalTickers] = useState<string[]>([]);
-  const [customText, setCustomText] = useState("");
-  const [editingList, setEditingList] = useState(false);
+  const {
+    list, setList, customTickers, setCustomTickers,
+    editingList, setEditingList, activeChips, setActiveChips,
+  } = useScanState({ prefix: "anomaly", defaultList: "", defaultBudget: 0, defaultChips: ["broad"] });
+
+  const personalTickers = list.split(",").map(t => t.trim()).filter(Boolean);
   const [queryTickers, setQueryTickers] = useState<string[] | null>(null);
 
   const { data, isFetching } = trpc.signallab.anomalyScan.useQuery(
@@ -22,11 +25,11 @@ export default function AnomalyRadarPage() {
   );
 
   const handleScan = () => {
-    const resolved = resolveTickers(activeIds, personalTickers, customText, EXTRA_CATS).slice(0, 300);
+    const resolved = resolveTickers(activeChips, personalTickers, customTickers, EXTRA_CATS).slice(0, 300);
     setQueryTickers(resolved);
   };
 
-  const resolvedCount = resolveTickers(activeIds, personalTickers, customText, EXTRA_CATS).length;
+  const resolvedCount = resolveTickers(activeChips, personalTickers, customTickers, EXTRA_CATS).length;
 
   return (
     <div className="space-y-4 p-4">
@@ -34,9 +37,9 @@ export default function AnomalyRadarPage() {
       <div className="rounded-lg border border-white/10 bg-[#101013] p-4 space-y-3">
         <h1 className="text-2xl font-bold tracking-tight text-white">⚡ Anomali Radarı</h1>
         <TickerChips
-          value={activeIds} onChange={setActiveIds}
-          personalTickers={personalTickers} onPersonalTickersChange={setPersonalTickers}
-          customText={customText} onCustomTextChange={setCustomText}
+          value={activeChips} onChange={setActiveChips}
+          personalTickers={personalTickers} onPersonalTickersChange={(next) => setList(next.join(","))}
+          customText={customTickers} onCustomTextChange={setCustomTickers}
           editingList={editingList} onEditingListChange={setEditingList}
           extraCategories={EXTRA_CATS}
         />
@@ -62,7 +65,10 @@ export default function AnomalyRadarPage() {
                 <span className="text-xl font-bold text-white">{c.ticker}</span>
                 <span className="text-lg font-bold text-white">${c.spot.toFixed(2)}</span>
                 <span className="bg-red-500/20 text-red-400 font-bold text-sm rounded px-2 py-0.5">
-                  {(c.drop1d * 100).toFixed(1)}% / 1g
+                  {(c.triggerDrop * 100).toFixed(1)}% / {c.trigger}
+                </span>
+                <span className="text-xs font-bold text-white/70">
+                  ({c.trigger === "1g" ? `3g: ${(c.drop3d * 100).toFixed(1)}%` : `1g: ${(c.drop1d * 100).toFixed(1)}%`})
                 </span>
                 <span className="font-bold text-white text-sm">{c.sigmaMove.toFixed(1)}σ hareket</span>
                 <span className="bg-white/10 text-white/90 font-bold text-xs rounded px-2 py-0.5">{c.sectorLabel}</span>
@@ -97,7 +103,7 @@ export default function AnomalyRadarPage() {
               <div className="flex items-center gap-3">
                 <DetayButton content={{
                   title: `${c.ticker} — Anomali Analizi`,
-                  logic: `Düşüş: ${(c.drop1d * 100).toFixed(1)}% (1g), ${(c.drop3d * 100).toFixed(1)}% (3g)\nHV20: ${(c.hv20 * 100).toFixed(0)}% → günlük σ: ${((c.hv20 / Math.sqrt(252)) * 100).toFixed(2)}%\nHareket: ${c.sigmaMove.toFixed(1)}σ (düşüş / günlük σ)\nSektör Relatif: ${(c.sectorRel * 100).toFixed(1)}% → ${c.sectorLabel}\nIV: %${c.ivPct.toFixed(0)} vs HV20: %${(c.hv20 * 100).toFixed(0)} → IV/HV: ${c.ivHvRatio.toFixed(1)}x\nŞişkin IV = yüksek prim. Çöküş SONRASI korku fiyatlanmış.\nAssignment = plan B: hisseyi iskontolu sahiplenirsin.`,
+                  logic: `Düşüş: ${(c.triggerDrop * 100).toFixed(1)}% (${c.trigger}) → ${c.sigmaMove.toFixed(1)}σ (${c.trigger} penceresinin σ'sı = HV20·√(${c.triggerDays}/252))\n1g: ${(c.drop1d * 100).toFixed(1)}% · 3g: ${(c.drop3d * 100).toFixed(1)}%\nHV20: ${(c.hv20 * 100).toFixed(0)}%\nSektör Relatif: ${(c.sectorRel * 100).toFixed(1)}% → ${c.sectorLabel}\nIV: %${c.ivPct.toFixed(0)} vs HV20: %${(c.hv20 * 100).toFixed(0)} → IV/HV: ${c.ivHvRatio.toFixed(1)}x\nŞişkin IV = yüksek prim. Çöküş SONRASI korku fiyatlanmış.\nAssignment = plan B: hisseyi iskontolu sahiplenirsin.`,
                   scenarios: [
                     { durum: "Fiyat toparlar", sonuc: `Prim cebinde kalır — yıllık %${c.conservative?.annualizedYieldPct.toFixed(0) ?? "?"} getiri`, renk: "green" },
                     { durum: "Fiyat düşer, strike kırılır", sonuc: `Hisse $${c.conservative?.effectiveCost.toFixed(1) ?? "?"} maliyetle sahiplenilir (bugünden %${((c.conservative?.effectiveCostVsSpotPct ?? 0) * 100).toFixed(0)} iskonto)`, renk: "yellow" },
@@ -138,6 +144,8 @@ export default function AnomalyRadarPage() {
             <div><div className="text-white/60">≥3σ MAX_KAR</div><div className="text-white">{data.calibration.bySigma.high.total > 0 ? `${data.calibration.bySigma.high.maxKar}/${data.calibration.bySigma.high.total}` : "—"}</div></div>
             <div><div className="text-white/60">Şirket-ağırlıklı</div><div className="text-white">{data.calibration.bySector.company.total > 0 ? `${data.calibration.bySector.company.maxKar}/${data.calibration.bySector.company.total}` : "—"}</div></div>
             <div><div className="text-white/60">Sektörle birlikte</div><div className="text-white">{data.calibration.bySector.sector.total > 0 ? `${data.calibration.bySector.sector.maxKar}/${data.calibration.bySector.sector.total}` : "—"}</div></div>
+            <div><div className="text-white/60">1g tetik</div><div className="text-white">{data.calibration.byTrigger.d1.total > 0 ? `${data.calibration.byTrigger.d1.maxKar}/${data.calibration.byTrigger.d1.total}` : "—"}</div></div>
+            <div><div className="text-white/60">3g tetik</div><div className="text-white">{data.calibration.byTrigger.d3.total > 0 ? `${data.calibration.byTrigger.d3.maxKar}/${data.calibration.byTrigger.d3.total}` : "—"}</div></div>
           </div>
           {data.calibration.total < 30 && <p className="text-xs font-bold text-white/50 mt-2">veri birikiyor ({data.calibration.total}/30)</p>}
         </details>
