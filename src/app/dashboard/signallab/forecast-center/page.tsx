@@ -99,11 +99,11 @@ export default function ForecastCenterPage() {
             {/* Left 2/5: Simple price line (no band, just daily points) */}
             <div className="col-span-2 rounded-lg border border-white/10 bg-[#101013] p-3">
               <div className="font-bold text-white text-xs mb-2">Fiyat Yolu</div>
-              <ResponsiveContainer width="100%" height={240}>
-                <ComposedChart data={data.days.map(d => ({ date: d.date.slice(8), point: d.point.price }))} margin={{ top: 20, right: 30, bottom: 10, left: 10 }}>
+              <ResponsiveContainer width="100%" height={300}>
+                <ComposedChart data={data.days.map(d => ({ date: d.date.slice(8), point: d.point.price }))} margin={{ top: 25, right: 30, bottom: 10, left: 10 }}>
                   <XAxis dataKey="date" tick={{ fill: "#fff", fontSize: 11, fontWeight: "bold" }} axisLine={{ stroke: "#fff", strokeWidth: 2 }} tickLine={{ stroke: "#fff" }} />
                   <YAxis domain={[(dataMin: number) => Math.floor(dataMin * 0.995), (dataMax: number) => Math.ceil(dataMax * 1.005)]} tick={{ fill: "#fff", fontSize: 11, fontWeight: "bold" }} width={45} axisLine={{ stroke: "#fff", strokeWidth: 2 }} tickLine={{ stroke: "#fff" }} />
-                  <Line type="monotone" dataKey="point" stroke="#ff7200" strokeWidth={3} dot={{ fill: "#ffffff", r: 5, strokeWidth: 2, stroke: "#ff7200" }} label={{ fill: "#ffffff", fontSize: 12, fontWeight: "bold", position: "top", offset: 10, formatter: (v: number) => `$${v.toFixed(1)}` }} />
+                  <Line type="monotone" dataKey="point" stroke="#ff7200" strokeWidth={3} dot={{ fill: "#ffffff", r: 5, strokeWidth: 2, stroke: "#ff7200" }} label={({ x, y, value, index }: { x: number; y: number; value: number; index: number }) => (<text x={index === 0 ? x + 23 : x} y={y - 10} fill="#ffffff" fontSize={12} fontWeight="bold" textAnchor="middle">${value.toFixed(1)}</text>)} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
@@ -111,18 +111,20 @@ export default function ForecastCenterPage() {
             {/* Right 3/5: Full band chart */}
             <div className="col-span-3 rounded-lg border border-white/10 bg-[#101013] p-3">
               <div className="font-bold text-white text-xs mb-2">1σ Bant + Yapısal Seviyeler</div>
-              <ResponsiveContainer width="100%" height={240}>
-                <ComposedChart data={data.days.map(d => ({ date: d.date.slice(5), lower: d.band[0], upper: d.band[1], point: d.point.price }))} margin={{ top: 10, right: 20, bottom: 10, left: 20 }}>
+              <ResponsiveContainer width="100%" height={300}>
+                <ComposedChart data={data.days.map(d => ({ date: d.date.slice(8), lower: d.band[0], upper: d.band[1], point: d.point.price }))} margin={{ top: 25, right: 20, bottom: 10, left: 20 }}>
                   <XAxis dataKey="date" tick={{ fill: "#fff", fontSize: 11, fontWeight: "bold" }} axisLine={{ stroke: "#fff", strokeWidth: 2 }} tickLine={{ stroke: "#fff" }} />
                   <YAxis domain={[(dataMin: number) => Math.floor(dataMin * 0.98), (dataMax: number) => Math.ceil(dataMax * 1.02)]} tick={{ fill: "#fff", fontSize: 11, fontWeight: "bold" }} axisLine={{ stroke: "#fff", strokeWidth: 2 }} tickLine={{ stroke: "#fff" }} />
                   <Tooltip contentStyle={{ background: "#1a1a1f", border: "1px solid rgba(255,255,255,0.1)", fontWeight: "bold" }} />
                   <Area type="monotone" dataKey="upper" stroke="none" fill="#ff720030" />
                   <Area type="monotone" dataKey="lower" stroke="none" fill="#101013" />
-                  <Line type="monotone" dataKey="point" stroke="#ff7200" strokeWidth={2} dot={{ fill: "#ff7200", r: 4 }} />
-                  {data.gex.putWall && <ReferenceLine y={data.gex.putWall} stroke="#ef4444" strokeDasharray="3 3" ifOverflow="discard" label={{ value: "PW", fill: "#ef4444", fontSize: 10, fontWeight: "bold" }} />}
-                  {data.gex.callWall && <ReferenceLine y={data.gex.callWall} stroke="#22c55e" strokeDasharray="3 3" ifOverflow="discard" label={{ value: "CW", fill: "#22c55e", fontSize: 10, fontWeight: "bold" }} />}
-                  {data.days.map((d, i) => d.events.length > 0 ? <ReferenceLine key={`ev-${i}`} x={d.date.slice(5)} stroke="#fbbf24" strokeDasharray="2 2" /> : null)}
-                  {data.days.map((d, i) => d.isExpiryDay ? <ReferenceLine key={`exp-${i}`} x={d.date.slice(5)} stroke="#a855f7" strokeDasharray="4 2" label={{ value: "OPEX", fill: "#a855f7", fontSize: 9, fontWeight: "bold" }} /> : null)}
+                  <Line type="monotone" dataKey="upper" stroke="#ffffff" strokeWidth={2} strokeDasharray="4 3" dot={false} />
+                  <Line type="monotone" dataKey="lower" stroke="#ffffff" strokeWidth={2} strokeDasharray="4 3" dot={false} />
+                  <Line type="monotone" dataKey="point" stroke="#ff7200" strokeWidth={2} dot={{ fill: "#ffffff", r: 4, strokeWidth: 2, stroke: "#ff7200" }} label={({ x, y, value, index }: { x: number; y: number; value: number; index: number }) => (<text x={index === 0 ? x + 23 : x} y={y - 10} fill="#ffffff" fontSize={12} fontWeight="bold" textAnchor="middle">${value.toFixed(1)}</text>)} />
+                  {data.gex.putWall && <ReferenceLine y={data.gex.putWall} stroke="#ef4444" strokeDasharray="3 3" ifOverflow="discard" label={{ value: "PW", fill: "#ff6b6b", fontSize: 11, fontWeight: "900", position: "insideTopRight" }} />}
+                  {data.gex.callWall && <ReferenceLine y={data.gex.callWall} stroke="#22c55e" strokeDasharray="3 3" ifOverflow="discard" label={{ value: "CW", fill: "#4ade80", fontSize: 11, fontWeight: "900", position: "insideTopRight" }} />}
+                  {data.days.map((d, i) => d.events.length > 0 ? <ReferenceLine key={`ev-${i}`} x={d.date.slice(8)} stroke="#fbbf24" strokeDasharray="2 2" /> : null)}
+                  {data.days.map((d, i) => d.isExpiryDay ? <ReferenceLine key={`exp-${i}`} x={d.date.slice(8)} stroke="#a855f7" strokeDasharray="4 2" label={{ value: "OPEX", fill: "#c084fc", fontSize: 10, fontWeight: "900", position: "top", offset: 12 }} /> : null)}
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
