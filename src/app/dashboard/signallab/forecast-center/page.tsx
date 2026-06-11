@@ -98,7 +98,7 @@ export default function ForecastCenterPage() {
           <div className="grid grid-cols-5 gap-3">
             {/* Left 2/5: Simple price line (no band, just daily points) */}
             <div className="col-span-2 rounded-lg border border-white/10 bg-[#101013] p-3">
-              <div className="font-bold text-white text-xs mb-2">Fiyat Yolu</div>
+              <div className="font-bold text-white text-sm mb-2">Fiyat Yolu</div>
               <ResponsiveContainer width="100%" height={300}>
                 <ComposedChart data={data.days.map(d => ({ date: d.date.slice(8), point: d.point.price }))} margin={{ top: 25, right: 30, bottom: 10, left: 10 }}>
                   <XAxis dataKey="date" tick={{ fill: "#fff", fontSize: 11, fontWeight: "bold" }} axisLine={{ stroke: "#fff", strokeWidth: 2 }} tickLine={{ stroke: "#fff" }} />
@@ -110,7 +110,7 @@ export default function ForecastCenterPage() {
 
             {/* Right 3/5: Full band chart */}
             <div className="col-span-3 rounded-lg border border-white/10 bg-[#101013] p-3">
-              <div className="font-bold text-white text-xs mb-2">1σ Bant + Yapısal Seviyeler</div>
+              <div className="font-bold text-white text-sm mb-2">1σ Bant + Yapısal Seviyeler</div>
               <ResponsiveContainer width="100%" height={300}>
                 <ComposedChart data={data.days.map(d => ({ date: d.date.slice(8), lower: d.band[0], upper: d.band[1], point: d.point.price }))} margin={{ top: 25, right: 20, bottom: 10, left: 20 }}>
                   <XAxis dataKey="date" tick={{ fill: "#fff", fontSize: 11, fontWeight: "bold" }} axisLine={{ stroke: "#fff", strokeWidth: 2 }} tickLine={{ stroke: "#fff" }} />
@@ -130,36 +130,42 @@ export default function ForecastCenterPage() {
             </div>
           </div>
 
-          {/* 5-row table */}
-          <div className="rounded-lg border border-white/10 bg-[#101013] p-4">
-            <div className="font-bold text-white/90 text-sm mb-2">Günlük Detay</div>
-            <table className="w-full text-xs font-bold">
-              <thead>
-                <tr className="border-b border-white/10">
-                  <th className="text-left py-1 text-white/90">Gün</th>
-                  <th className="text-right py-1 text-white/90">Model Tahmini</th>
-                  <th className="text-right py-1 text-white/90">1σ Bant</th>
-                  <th className="text-right py-1 text-white/90">Bileşenler</th>
-                  <th className="text-left py-1 pl-3 text-white/90">Olaylar</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.days.map((d, i) => (
-                  <tr key={i} className={`border-b border-white/5 ${d.isExpiryDay ? "bg-purple-500/10" : ""}`}>
-                    <td className="py-1.5 text-white/90">{d.date}</td>
-                    <td className="text-right py-1.5 text-white">${d.point.price.toFixed(2)}</td>
-                    <td className="text-right py-1.5 text-white/90">${d.band[0].toFixed(2)} — ${d.band[1].toFixed(2)}</td>
-                    <td className="text-right py-1.5 text-white/70">
-                      Skew:{d.point.skewComponent >= 0 ? "+" : ""}{d.point.skewComponent.toFixed(2)}
-                      {d.isExpiryDay && <span className="ml-1 text-purple-300">Pin:{d.point.pinComponent >= 0 ? "+" : ""}{d.point.pinComponent.toFixed(2)}</span>}
-                    </td>
-                    <td className="text-left py-1.5 pl-3 text-yellow-300/90">
-                      {d.events.map(e => e.name).join(", ") || "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {/* Günlük Detay Kartları */}
+          <div className="space-y-2">
+            <div className="font-bold text-white/90 text-sm">Günlük Detay</div>
+            {/* Kolon başlıkları */}
+            <div className="flex items-center px-4 text-sm font-bold text-white">
+              <span className="w-24 text-center">Gün</span>
+              <span className="w-24 text-center ml-6">Tahmin</span>
+              <span className="w-44 text-center ml-6">1σ Bant</span>
+              <span className="w-48 text-center ml-6">Bileşenler</span>
+              <span className="flex-1 text-left ml-[200px]">Olaylar</span>
+              <span className="w-16 text-center ml-6">Vade</span>
+              <span className="w-20 ml-6"></span>
+            </div>
+            {data.days.map((d, i) => (
+              <div key={i} className={`rounded-lg border border-white/10 bg-[#101013] px-4 py-2 ${d.isExpiryDay ? "border-purple-500/40" : ""}`}>
+                <div className="flex items-center justify-between flex-wrap">
+                  <div className="flex items-center text-sm font-bold whitespace-nowrap">
+                    <span className="w-24 text-center text-white">{d.date}</span>
+                    <span className="w-24 text-center ml-6"><span className="bg-[#ff7200] text-white rounded px-2 py-1.5">${d.point.price.toFixed(2)}</span></span>
+                    <span className="w-44 text-center ml-6 text-white">${d.band[0].toFixed(2)} — ${d.band[1].toFixed(2)}</span>
+                    <span className="w-48 text-center ml-6 text-white/90">Skew:{d.point.skewComponent >= 0 ? "+" : ""}{d.point.skewComponent.toFixed(2)}{d.isExpiryDay && ` Pin:${d.point.pinComponent >= 0 ? "+" : ""}${d.point.pinComponent.toFixed(2)}`}</span>
+                    <span className="flex-1 text-left ml-[200px]">{d.events.length > 0 ? <span className="text-yellow-300">{d.events.map(e => e.name).join(", ")}</span> : <span className="text-white/50">—</span>}</span>
+                    <span className="w-16 text-center ml-6">{d.isExpiryDay ? <span className="text-purple-300">OPEX</span> : <span className="text-white/50">—</span>}</span>
+                  </div>
+                  <DetayButton below content={{
+                    title: `${d.date} — Günlük Analiz`,
+                    logic: `Model Tahmini: $${d.point.price.toFixed(2)}\n1σ Bant: $${d.band[0].toFixed(2)} — $${d.band[1].toFixed(2)}\nSkew Bileşeni: ${d.point.skewComponent >= 0 ? "+" : ""}${d.point.skewComponent.toFixed(2)}${d.isExpiryDay ? `\nPin Bileşeni: ${d.point.pinComponent >= 0 ? "+" : ""}${d.point.pinComponent.toFixed(2)}` : ""}\n${d.events.length > 0 ? `Olaylar: ${d.events.map(e => e.name).join(", ")}` : "Olay yok"}${d.isExpiryDay ? "\n⚠️ Opsiyon vade günü — gamma pinning etkisi aktif" : ""}`,
+                    scenarios: [
+                      { durum: `Spot > $${d.band[1].toFixed(0)}`, sonuc: "Üst bant kırılımı — momentum yukarı", renk: "green" as const },
+                      { durum: `Spot < $${d.band[0].toFixed(0)}`, sonuc: "Alt bant kırılımı — satış baskısı", renk: "red" as const },
+                      { durum: `$${d.band[0].toFixed(0)} < Spot < $${d.band[1].toFixed(0)}`, sonuc: "Bant içi — ortalamaya dönüş beklenir", renk: "yellow" as const },
+                    ],
+                  }} />
+                </div>
+              </div>
+            ))}
           </div>
 
           {/* Honesty Box */}

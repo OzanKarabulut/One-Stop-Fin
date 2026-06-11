@@ -8,15 +8,16 @@ export interface DetailContent {
   glossary?: { term: string; def: string }[];
 }
 
-export function DetayButton({ content }: { content: DetailContent }) {
+export function DetayButton({ content, below }: { content: DetailContent; below?: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <>
       <button onClick={() => setOpen(!open)}
-        className="bg-[#ff7200] text-white font-bold rounded-lg px-4 py-2 text-sm hover:bg-[#ff8a2b] transition-colors">
+        className="bg-[#ff7200] text-white font-bold rounded-lg px-4 py-2 text-sm hover:bg-[#ff8a2b] transition-colors shrink-0">
         Detay {open ? "▾" : "▸"}
       </button>
-      {open && <DetailPanel content={content} />}
+      {open && !below && <DetailPanel content={content} />}
+      {open && below && <div className="basis-full mt-2"><DetailPanel content={content} /></div>}
     </>
   );
 }
