@@ -69,10 +69,10 @@ async function main() {
 
   // Next.js dev server
   console.log("[start-local] Next.js başlatılıyor...");
-  const next = spawn("npx", ["next", "dev"], {
+  const next = spawn("npx", ["next", "dev", "--port", "3000"], {
     cwd: PROJECT_DIR,
     stdio: "inherit",
-    env: { ...process.env, DATABASE_URL },
+    env: { ...process.env, DATABASE_URL, PORT: "3000" },
   });
 
   // Graceful shutdown

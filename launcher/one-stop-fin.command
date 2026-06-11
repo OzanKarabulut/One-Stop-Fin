@@ -21,6 +21,19 @@ if curl -sf "$HEALTH_URL" >/dev/null 2>&1; then
   exit 0
 fi
 
+# --- Port 3000 meşgulse uyar ve serbest bırak ---
+PORT_PID=$(lsof -ti :3000 2>/dev/null)
+if [ -n "$PORT_PID" ]; then
+  PROC_NAME=$(ps -p "$PORT_PID" -o comm= 2>/dev/null)
+  RESPONSE=$(osascript -e "display alert \"One-Stop-Fin\" message \"Port 3000 başka bir işlem tarafından kullanılıyor ($PROC_NAME, PID: $PORT_PID). Kapatılsın mı?\" buttons {\"İptal\", \"Kapat\"} default button \"Kapat\"" 2>&1)
+  if echo "$RESPONSE" | grep -q "Kapat"; then
+    kill "$PORT_PID" 2>/dev/null
+    sleep 1
+  else
+    exit 0
+  fi
+fi
+
 # --- Uygulamayı başlat (foreground) ---
 node scripts/start-local.mjs &
 APP_PID=$!
