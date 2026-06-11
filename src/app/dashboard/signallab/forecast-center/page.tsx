@@ -99,7 +99,7 @@ export default function ForecastCenterPage() {
             {/* Left 2/5: Simple price line (no band, just daily points) */}
             <div className="col-span-2 rounded-lg border border-white/10 bg-[#101013] p-3">
               <div className="font-bold text-white text-sm mb-2">Fiyat Yolu</div>
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={360}>
                 <ComposedChart data={data.days.map(d => ({ date: d.date.slice(8), point: d.point.price }))} margin={{ top: 25, right: 30, bottom: 10, left: 10 }}>
                   <XAxis dataKey="date" tick={{ fill: "#fff", fontSize: 11, fontWeight: "bold" }} axisLine={{ stroke: "#fff", strokeWidth: 2 }} tickLine={{ stroke: "#fff" }} />
                   <YAxis domain={[(dataMin: number) => Math.floor(dataMin * 0.995), (dataMax: number) => Math.ceil(dataMax * 1.005)]} tick={{ fill: "#fff", fontSize: 11, fontWeight: "bold" }} width={45} axisLine={{ stroke: "#fff", strokeWidth: 2 }} tickLine={{ stroke: "#fff" }} />
@@ -111,7 +111,7 @@ export default function ForecastCenterPage() {
             {/* Right 3/5: Full band chart */}
             <div className="col-span-3 rounded-lg border border-white/10 bg-[#101013] p-3">
               <div className="font-bold text-white text-sm mb-2">1σ Bant + Yapısal Seviyeler</div>
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={360}>
                 <ComposedChart data={data.days.map(d => ({ date: d.date.slice(8), lower: d.band[0], upper: d.band[1], point: d.point.price }))} margin={{ top: 25, right: 20, bottom: 10, left: 20 }}>
                   <XAxis dataKey="date" tick={{ fill: "#fff", fontSize: 11, fontWeight: "bold" }} axisLine={{ stroke: "#fff", strokeWidth: 2 }} tickLine={{ stroke: "#fff" }} />
                   <YAxis domain={[(dataMin: number) => Math.floor(dataMin * 0.98), (dataMax: number) => Math.ceil(dataMax * 1.02)]} tick={{ fill: "#fff", fontSize: 11, fontWeight: "bold" }} axisLine={{ stroke: "#fff", strokeWidth: 2 }} tickLine={{ stroke: "#fff" }} />
@@ -131,10 +131,10 @@ export default function ForecastCenterPage() {
           </div>
 
           {/* Günlük Detay Kartları */}
-          <div className="space-y-2">
-            <div className="font-bold text-white/90 text-sm">Günlük Detay</div>
+          {/* Kolon başlıkları + satırlar kutusu */}
+          <div className="rounded-lg border border-white/10 bg-[#101013] p-4 space-y-3">
             {/* Kolon başlıkları */}
-            <div className="flex items-center px-4 text-sm font-bold text-white">
+            <div className="flex items-center text-sm font-bold text-white border-b border-white/10 pb-2">
               <span className="w-24 text-center">Gün</span>
               <span className="w-24 text-center ml-6">Tahmin</span>
               <span className="w-44 text-center ml-6">1σ Bant</span>
@@ -144,7 +144,7 @@ export default function ForecastCenterPage() {
               <span className="w-20 ml-6"></span>
             </div>
             {data.days.map((d, i) => (
-              <div key={i} className={`rounded-lg border border-white/10 bg-[#101013] px-4 py-2 ${d.isExpiryDay ? "border-purple-500/40" : ""}`}>
+              <div key={i} className={`rounded-lg border border-white/20 bg-[#0a0a0d] px-4 py-2 ${d.isExpiryDay ? "border-purple-500/40" : ""}`}>
                 <div className="flex items-center justify-between flex-wrap">
                   <div className="flex items-center text-sm font-bold whitespace-nowrap">
                     <span className="w-24 text-center text-white">{d.date}</span>
