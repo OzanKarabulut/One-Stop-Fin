@@ -42,3 +42,12 @@ export function sectorEtfFor(ticker: string): string {
   for (const c of TICKER_CATEGORIES) if (c.tickers.includes(ticker)) return SECTOR_ETF[c.id] ?? "SPY";
   return "SPY";
 }
+
+// User's judgment beats the auto quality score. 0-100. Edit freely.
+export const QUALITY_OVERRIDES: Record<string, number> = { MSTR: 25, LCID: 20 };
+
+export const KNOWN_ETFS = new Set([
+  "SPY","QQQ","IWM","XLE","XLF","XLK","XLV","XLP","XLI","XLU","XBI","GDX","TLT","SLV","SMH",
+  "ARKK","KWEB","FXI","EEM","EWZ","GLD","USO","HYG","KRE","JETS","TAN","URA","XME",
+  ...(TICKER_CATEGORIES.find(c => c.id === "etf")?.tickers ?? []),
+]);

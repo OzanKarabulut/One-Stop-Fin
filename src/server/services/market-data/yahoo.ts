@@ -121,48 +121,107 @@ async function fetchYahooJSON(urlStr: string): Promise<unknown> {
 const sparkCache = new Map<string, { data: Map<string, number[]>; ts: number }>();
 const SPARK_TTL = 5 * 60 * 1000;
 
-export async function getSparkCloses(symbols: string[]): Promise<Map<string, number[]>> {
-  const result = new Map<string, number[]>();
-  const chunks: string[][] = [];
-  for (let i = 0; i < symbols.length; i += 50) chunks.push(symbols.slice(i, i + 50));
+export interface SparkChunkInfo { symbols: number; status: number; parsed: number; retried: boolean; }
 
-  for (const chunk of chunks) {
+function parseSparkBody(body: string, symbols: string[]): Map<string, number[]> {
+  const parsed = new Map<string, number[]>();
+  const json = JSON.parse(body) as Record<string, unknown>;
+  const sparkResult = (json as { spark?: { result?: Array<{ symbol: string; response?: Array<{ indicators?: { quote?: Array<{ close?: (number | null)[] }> } }> }> } })?.spark?.result;
+  if (sparkResult) {
+    for (const item of sparkResult) {
+      const closes = item.response?.[0]?.indicators?.quote?.[0]?.close;
+      if (closes) parsed.set(item.symbol, closes.filter((c): c is number => c != null));
+    }
+  } else {
+    for (const sym of symbols) {
+      const entry = (json as Record<string, { close?: (number | null)[] }>)[sym];
+      if (entry?.close) parsed.set(sym, entry.close.filter((c): c is number => c != null));
+    }
+  }
+  return parsed;
+}
+
+async function fetchSparkChunk(syms: string[]): Promise<{ data: Map<string, number[]>; statuses: SparkChunkInfo[]; invalid: string[] }> {
+  const data = new Map<string, number[]>();
+  const statuses: SparkChunkInfo[] = [];
+  const invalid: string[] = [];
+
+  const doFetch = async (symbols: string[]): Promise<{ status: number; body: string }> => {
+    const { crumb: c, cookies } = await ensureCrumb();
+    const url = `https://query1.finance.yahoo.com/v7/finance/spark?symbols=${symbols.join(",")}&range=7d&interval=1d&crumb=${encodeURIComponent(c)}`;
+    return curlFetch(url, cookies);
+  };
+
+  async function recurse(symbols: string[]): Promise<void> {
+    if (symbols.length === 0) return;
+
+    // Pace
+    await new Promise(r => setTimeout(r, 1500));
+
+    let res = await doFetch(symbols);
+
+    // Retry on 429
+    if (res.status === 429) {
+      await new Promise(r => setTimeout(r, 3000));
+      res = await doFetch(symbols);
+    }
+
+    // Refresh crumb on 401/403
+    if (res.status === 401 || res.status === 403) {
+      crumb = null; crumbCookies = null; crumbFetchedAt = 0;
+      await new Promise(r => setTimeout(r, 1000));
+      res = await doFetch(symbols);
+    }
+
+    if (res.status === 200) {
+      const parsed = parseSparkBody(res.body, symbols);
+      statuses.push({ symbols: symbols.length, status: 200, parsed: parsed.size, retried: false });
+      parsed.forEach((v, k) => data.set(k, v));
+    } else if (res.status === 400 || (res.status >= 400 && res.status < 500 && res.status !== 429)) {
+      // Binary split to isolate bad symbols
+      if (symbols.length === 1) {
+        invalid.push(symbols[0]);
+        statuses.push({ symbols: 1, status: res.status, parsed: 0, retried: false });
+      } else {
+        const mid = Math.ceil(symbols.length / 2);
+        await recurse(symbols.slice(0, mid));
+        await recurse(symbols.slice(mid));
+      }
+    } else {
+      console.warn(`[getSparkCloses] HTTP ${res.status}: ${res.body.slice(0, 120)}`);
+      statuses.push({ symbols: symbols.length, status: res.status, parsed: 0, retried: false });
+    }
+  }
+
+  await recurse(syms);
+  return { data, statuses, invalid };
+}
+
+export async function getSparkCloses(symbols: string[]): Promise<{ data: Map<string, number[]>; chunkResults: SparkChunkInfo[]; invalid: string[] }> {
+  const result = new Map<string, number[]>();
+  const chunkResults: SparkChunkInfo[] = [];
+  const allInvalid: string[] = [];
+  const chunks: string[][] = [];
+  for (let i = 0; i < symbols.length; i += 20) chunks.push(symbols.slice(i, i + 20));
+
+  for (let ci = 0; ci < chunks.length; ci++) {
+    const chunk = chunks[ci];
     const key = chunk.slice().sort().join(",");
     const cached = sparkCache.get(key);
     if (cached && Date.now() - cached.ts < SPARK_TTL) {
       cached.data.forEach((v, k) => result.set(k, v));
+      chunkResults.push({ symbols: chunk.length, status: 200, parsed: cached.data.size, retried: false });
       continue;
     }
 
-    const chunkResult = new Map<string, number[]>();
-    try {
-      const url = `https://query1.finance.yahoo.com/v7/finance/spark?symbols=${chunk.join(",")}&range=7d&interval=1d`;
-      const { status, body } = curlFetch(url);
-      if (status === 200) {
-        const json = JSON.parse(body) as Record<string, unknown>;
-        const sparkResult = (json as { spark?: { result?: Array<{ symbol: string; response?: Array<{ indicators?: { quote?: Array<{ close?: (number | null)[] }> } }> }> } })?.spark?.result;
-        if (sparkResult) {
-          for (const item of sparkResult) {
-            const closes = item.response?.[0]?.indicators?.quote?.[0]?.close;
-            if (closes) chunkResult.set(item.symbol, closes.filter((c): c is number => c != null));
-          }
-        } else {
-          // Compact-map fallback: top-level { SYMBOL: { close: [...] } }
-          for (const sym of chunk) {
-            const entry = (json as Record<string, { close?: (number | null)[] }>)[sym];
-            if (entry?.close) chunkResult.set(sym, entry.close.filter((c): c is number => c != null));
-          }
-        }
-      } else {
-        console.warn(`[getSparkCloses] HTTP ${status}: ${body.slice(0, 120)}`);
-      }
-    } catch { /* skip chunk on error */ }
-
-    sparkCache.set(key, { data: chunkResult, ts: Date.now() });
-    chunkResult.forEach((v, k) => result.set(k, v));
+    const { data: chunkData, statuses, invalid } = await fetchSparkChunk(chunk);
+    chunkResults.push(...statuses);
+    allInvalid.push(...invalid);
+    sparkCache.set(key, { data: chunkData, ts: Date.now() });
+    chunkData.forEach((v, k) => result.set(k, v));
   }
 
-  return result;
+  return { data: result, chunkResults, invalid: allInvalid };
 }
 
 // ─── Provider ────────────────────────────────────────────────────────────────

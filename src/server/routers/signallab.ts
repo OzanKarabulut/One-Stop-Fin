@@ -1212,9 +1212,56 @@ export const signallabRouter = router({
     .input(z.object({ tickers: z.array(z.string()).max(300), debugTicker: z.string().optional() }))
     .query(async ({ input }) => {
       const { getSparkCloses } = await import("../services/market-data/yahoo");
-      const { sectorEtfFor, SECTOR_ETF } = await import("@/lib/ticker-universe");
+      const { sectorEtfFor, SECTOR_ETF, QUALITY_OVERRIDES, TICKER_CATEGORIES, KNOWN_ETFS } = await import("@/lib/ticker-universe");
       const { historicalVol, probITMPut } = await import("@/lib/vol-math");
       const { computeGexProfile } = await import("@/lib/gex");
+
+      // Quality score helpers
+      const qualityCache = new Map<string, { data: unknown; ts: number }>();
+      const QUALITY_TTL = 24 * 60 * 60 * 1000;
+      async function fetchFundamentals(ticker: string): Promise<unknown> {
+        const cached = qualityCache.get(ticker);
+        if (cached && Date.now() - cached.ts < QUALITY_TTL) return cached.data;
+        try {
+          const json = await yahoo.fetchJSON(`https://query2.finance.yahoo.com/v10/finance/quoteSummary/${ticker}?modules=financialData,defaultKeyStatistics`) as { quoteSummary?: { result?: Array<Record<string, unknown>> } };
+          const data = json?.quoteSummary?.result?.[0] ?? null;
+          qualityCache.set(ticker, { data, ts: Date.now() });
+          return data;
+        } catch { qualityCache.set(ticker, { data: null, ts: Date.now() }); return null; }
+      }
+      function computeQuality(f: unknown): { score: number; why: string[] } {
+        let s = 50; const why: string[] = [];
+        const fd = (f as Record<string, unknown>)?.financialData as Record<string, { raw?: number }> | undefined;
+        const ks = (f as Record<string, unknown>)?.defaultKeyStatistics as Record<string, { raw?: number }> | undefined;
+        const pm = fd?.profitMargins?.raw;
+        if (pm != null) { if (pm > 0.05) { s += 15; why.push("kârlı"); } else if (pm >= 0) { s += 5; why.push("marj ince"); } else { s -= 15; why.push("zarar ediyor"); } }
+        const rg = fd?.revenueGrowth?.raw;
+        if (rg != null) { if (rg > 0.10) { s += 10; why.push("büyüme güçlü"); } else if (rg < 0) { s -= 10; why.push("gelir daralıyor"); } }
+        const de = fd?.debtToEquity?.raw;
+        if (de != null) { if (de < 100) s += 10; else if (de > 200) { s -= 10; why.push("borç yüksek"); } }
+        const fcf = fd?.freeCashflow?.raw;
+        if (fcf != null) { if (fcf > 0) s += 10; else { s -= 10; why.push("nakit yakıyor"); } }
+        const rec = fd?.recommendationMean?.raw;
+        if (rec != null) { if (rec <= 2.2) s += 10; else if (rec >= 3.5) s -= 10; }
+        const spf = ks?.shortPercentOfFloat?.raw;
+        if (spf != null && spf > 0.20) { s -= 10; why.push("short float yüksek"); }
+        const peg = ks?.pegRatio?.raw ?? (ks as Record<string, { raw?: number }> | undefined)?.trailingPegRatio?.raw;
+        if (peg != null && peg > 0) {
+          if (peg < 1.5) { s += 10; why.push(`PEG ${peg.toFixed(2)} — büyümeye göre makul`); }
+          else if (peg > 3) { s -= 10; why.push(`PEG ${peg.toFixed(2)} — büyümeye göre pahalı`); }
+          else { why.push(`PEG ${peg.toFixed(2)} — nötr`); }
+        } else if (fd || ks) { why.push("PEG hesaplanamıyor (negatif/eksik büyüme)"); }
+        return { score: Math.min(100, Math.max(0, Math.round(s))), why };
+      }
+      const etfTickers = KNOWN_ETFS;
+      async function getQuality(ticker: string): Promise<{ score: number; source: string; why: string[] }> {
+        if (QUALITY_OVERRIDES[ticker] != null) return { score: QUALITY_OVERRIDES[ticker], source: "manuel", why: ["kullanıcı puanı"] };
+        if (etfTickers.has(ticker)) return { score: 70, source: "etf", why: ["çeşitlendirilmiş ETF"] };
+        const f = await fetchFundamentals(ticker);
+        if (!f) return { score: 50, source: "veri yok", why: ["fundamental veri yok"] };
+        const q = computeQuality(f);
+        return { score: q.score, source: "oto", why: q.why };
+      }
 
       const DROP_1D = 0.07;
       const DROP_3D = 0.12;
@@ -1227,7 +1274,7 @@ export const signallabRouter = router({
       const allSymbols = [...new Set([...input.tickers, ...etfSet])];
 
       // Stage 1: batch spark closes
-      const sparkData = await getSparkCloses(allSymbols);
+      const { data: sparkData, chunkResults, invalid: invalidSymbols } = await getSparkCloses(allSymbols);
 
       // Compute ETF drops for sector-relative
       const etfDrop1d = new Map<string, number>();
@@ -1324,6 +1371,9 @@ export const signallabRouter = router({
         expiry: string; dte: number;
         conservative: StrikeSuggestion | null; aggressive: StrikeSuggestion | null;
         opportunityScore: number;
+        displayScore: number; tier: "GÜÇLÜ" | "ORTA" | "ZAYIF";
+        qualityScore: number; qualitySource: string; qualityWhy: string[]; balancedScore: number;
+        premiumDollars: number; premiumFactor: number;
       }
       interface StrikeSuggestion {
         strike: number; premium: number; totalCredit: number;
@@ -1455,7 +1505,7 @@ export const signallabRouter = router({
           }
 
           const conservativeMax = Math.min(putWall ?? spot * 0.88, spot * 0.88);
-          const conservative = pickStrike(conservativeMax);
+          let conservative = pickStrike(conservativeMax);
 
           // Aggressive: closest to spot*0.91
           const aggressiveTarget = spot * 0.91;
@@ -1478,7 +1528,36 @@ export const signallabRouter = router({
             }
           }
 
-          const opportunityScore = ivHvRatio * sigmaMove * (1 + Math.abs(t.dd5));
+          // Strike collision fix: if both resolve to same strike, move conservative lower or drop aggressive
+          if (conservative && aggressive && conservative.strike === aggressive.strike) {
+            const lowerPuts = puts.filter(p => p.strike < conservative!.strike).sort((a, b) => b.strike - a.strike);
+            let moved = false;
+            for (const p of lowerPuts) {
+              const prem = p.bid > 0 ? p.bid : p.last > 0 ? p.last : 0;
+              if (prem > 0) {
+                const pA = probITMPut(spot, p.strike, T, ivPct / 100);
+                conservative = { strike: p.strike, premium: prem, totalCredit: prem * 100, annualizedYieldPct: (prem / p.strike) * (365 / dte) * 100, pAssign: Math.round(pA * 10000) / 100, buffer: (spot - p.strike) / spot, effectiveCost: p.strike - prem, effectiveCostVsSpotPct: (spot - (p.strike - prem)) / spot, oi: p.oi };
+                moved = true; break;
+              }
+            }
+            if (!moved) aggressive = null;
+          }
+
+          let opportunityScore = ivHvRatio * sigmaMove * (1 + Math.abs(t.dd5));
+
+          // Premium-dollar floor: penalize when premium too small to cover commissions
+          const premiumDollars = (conservative?.premium ?? 0) * 100;
+          const premiumFactor = Math.min(1, Math.max(0.2, premiumDollars / 25));
+          opportunityScore *= premiumFactor;
+
+          // ×20 mapping chosen so a 2σ crash with 1.5x IV/HV lands ~60-70; recalibrate later from AnomalyLog outcomes
+          const displayScore = Math.min(100, Math.round(opportunityScore * 20));
+          const tier = displayScore >= 75 ? "GÜÇLÜ" as const : displayScore >= 50 ? "ORTA" as const : "ZAYIF" as const;
+
+          // Quality dimension
+          const q = await getQuality(t.ticker);
+          // multiplicative: low quality is a brake that opportunity cannot buy back — additive let a 95-opportunity junk name outrank quality names
+          const balancedScore = Math.round(displayScore * q.score / 100);
 
           cards.push({
             ticker: t.ticker, spot, drop1d: t.drop1d, prevDayDrop: t.prevDayDrop, drop3d: t.drop3d, dd5: t.dd5,
@@ -1486,6 +1565,9 @@ export const signallabRouter = router({
             hv20, sigmaMove, sectorRel, sectorLabel, ivPct, ivHvRatio,
             ivPercentile, ivPercentilePrev, earningsInWin, putWall,
             expiry: bestExpiry, dte, conservative, aggressive, opportunityScore,
+            displayScore, tier,
+            qualityScore: q.score, qualitySource: q.source, qualityWhy: q.why, balancedScore,
+            premiumDollars, premiumFactor,
           });
 
           // Log to DB
@@ -1565,7 +1647,7 @@ export const signallabRouter = router({
 
       return {
         cards, calibration,
-        meta: { scanned: input.tickers.length, stage1Ms, triggeredCount: triggered.length, nearMisses, skipped: { count: skippedTickers.length, sample: skippedTickers.slice(0, 10) }, debug },
+        meta: { scanned: input.tickers.length, stage1Ms, triggeredCount: triggered.length, nearMisses, skipped: { count: skippedTickers.length, sample: skippedTickers.slice(0, 10) }, chunkResults, invalidSymbols, debug },
       };
     }),
 });
