@@ -87,8 +87,7 @@ function PickCard({ pick, budget, onAdd, putWall }: { pick: Pick; budget: number
       <div className="flex items-start justify-between">
         <div>
           <div className="flex items-center gap-1.5 text-base font-bold tracking-tight text-white">
-            {pick.ticker} <span className="text-white/90">{pick.strike.toFixed(0)}P</span>
-            {putWall && pick.strike < putWall && <span title="Put wall altında — dealer long gamma destek bölgesi">🛡</span>}
+            {pick.ticker} <span className="text-white/90">{pick.strike.toFixed(0)}P</span>{putWall && pick.strike < putWall && <span className="ml-1" title="Put wall altında — dealer long gamma destek bölgesi">🛡</span>}
             <QualityBadge grade={pick.companyQuality} />
             {(pick as Pick & { hasEarnings?: boolean }).hasEarnings && (
               <span className="text-red-400 text-xs font-bold" title="Vade içinde earnings — binary event riski, skor düşürüldü">📊 ERN</span>
@@ -175,9 +174,8 @@ function TickerGroup({ group, onAdd, maxStrike }: { group: Group; onAdd: (s: Pic
             <tbody>
               {group.strikes.map((s) => (
                 <tr key={`${s.ticker}-${s.strike}`} className="border-b border-white/[0.03] hover:bg-white/[0.03]">
-                  <td className="w-16 pl-4 pr-0 py-2 font-bold text-white">
-                    ${s.strike.toFixed(1)}
-                    {effectiveMaxStrike && s.strike < effectiveMaxStrike && <span title="Put wall altında — dealer long gamma destek bölgesi"> 🛡</span>}
+                  <td className="pl-4 pr-0 py-2 font-bold text-white whitespace-nowrap">
+                    <span>${s.strike.toFixed(1)}</span>{effectiveMaxStrike && s.strike < effectiveMaxStrike && <span className="ml-1" title="Put wall altında — dealer long gamma destek bölgesi">🛡</span>}
                     {(s as Pick & { hasEarnings?: boolean }).hasEarnings && (
                       <span className="ml-1 text-red-400 text-xs" title="Vade içinde earnings — binary event riski, skor düşürüldü">📊 ERN</span>
                     )}
@@ -339,6 +337,16 @@ function CSPScreenerInner() {
   const handleScan = useCallback(async () => { setScanning(true); await refetch(); setScanning(false); }, [refetch]);
   const isLoading = isFetching || scanning;
 
+  // Fake progress: cycle through tickers while scanning
+  const [scanProgress, setScanProgress] = useState(0);
+  useEffect(() => {
+    if (!isLoading) { setScanProgress(0); return; }
+    const interval = setInterval(() => {
+      setScanProgress((p) => (p + 1) % resolvedTickers.length);
+    }, 1600);
+    return () => clearInterval(interval);
+  }, [isLoading, resolvedTickers.length]);
+
   // Auto-scan when ticker param present
   useEffect(() => {
     if (paramTicker && !autoScanned.current) {
@@ -432,6 +440,7 @@ function CSPScreenerInner() {
           </button>
           <span className={`text-sm font-bold ${resolvedTickers.length > 60 ? "text-yellow-400" : "text-white/90"}`} title={resolvedTickers.length > 60 ? "Büyük tarama — süre uzayacak" : ""}>
             {resolvedTickers.length} hisse · ~{resolvedTickers.length * 2}sn
+            {isLoading && <span className="ml-2 text-[#ff7200]">{resolvedTickers[scanProgress]} ({scanProgress + 1}/{resolvedTickers.length})</span>}
           </span>
         </div>
       </div>
