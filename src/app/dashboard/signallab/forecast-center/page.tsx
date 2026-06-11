@@ -103,7 +103,7 @@ export default function ForecastCenterPage() {
                 <ComposedChart data={data.days.map(d => ({ date: d.date.slice(8), point: d.point.price }))} margin={{ top: 25, right: 30, bottom: 10, left: 10 }}>
                   <XAxis dataKey="date" tick={{ fill: "#fff", fontSize: 11, fontWeight: "bold" }} axisLine={{ stroke: "#fff", strokeWidth: 2 }} tickLine={{ stroke: "#fff" }} />
                   <YAxis domain={[(dataMin: number) => Math.floor(dataMin * 0.995), (dataMax: number) => Math.ceil(dataMax * 1.005)]} tick={{ fill: "#fff", fontSize: 11, fontWeight: "bold" }} width={45} axisLine={{ stroke: "#fff", strokeWidth: 2 }} tickLine={{ stroke: "#fff" }} />
-                  <Line type="monotone" dataKey="point" stroke="#ff7200" strokeWidth={3} dot={{ fill: "#ffffff", r: 5, strokeWidth: 2, stroke: "#ff7200" }} label={({ x, y, value, index }: { x: number; y: number; value: number; index: number }) => (<text x={index === 0 ? x + 23 : x} y={y - 10} fill="#ffffff" fontSize={12} fontWeight="bold" textAnchor="middle">${value.toFixed(1)}</text>)} />
+                  <Line type="monotone" dataKey="point" stroke="#ff7200" strokeWidth={3} dot={{ fill: "#ffffff", r: 5, strokeWidth: 2, stroke: "#ff7200" }} label={({ x, y, value, index }: { x: number; y: number; value: number; index: number }) => (<text x={index === 0 ? x + 25 : x} y={y - 10} fill="#ffffff" fontSize={12} fontWeight="bold" textAnchor="middle">${value.toFixed(1)}</text>)} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
@@ -120,7 +120,7 @@ export default function ForecastCenterPage() {
                   <Area type="monotone" dataKey="lower" stroke="none" fill="#101013" />
                   <Line type="monotone" dataKey="upper" stroke="#ffffff" strokeWidth={2} strokeDasharray="4 3" dot={false} />
                   <Line type="monotone" dataKey="lower" stroke="#ffffff" strokeWidth={2} strokeDasharray="4 3" dot={false} />
-                  <Line type="monotone" dataKey="point" stroke="#ff7200" strokeWidth={2} dot={{ fill: "#ffffff", r: 4, strokeWidth: 2, stroke: "#ff7200" }} label={({ x, y, value, index }: { x: number; y: number; value: number; index: number }) => (<text x={index === 0 ? x + 23 : x} y={y - 10} fill="#ffffff" fontSize={12} fontWeight="bold" textAnchor="middle">${value.toFixed(1)}</text>)} />
+                  <Line type="monotone" dataKey="point" stroke="#ff7200" strokeWidth={2} dot={{ fill: "#ffffff", r: 4, strokeWidth: 2, stroke: "#ff7200" }} label={({ x, y, value, index }: { x: number; y: number; value: number; index: number }) => (<text x={index === 0 ? x + 25 : x} y={y - 10} fill="#ffffff" fontSize={12} fontWeight="bold" textAnchor="middle">${value.toFixed(1)}</text>)} />
                   {data.gex.putWall && <ReferenceLine y={data.gex.putWall} stroke="#ef4444" strokeDasharray="3 3" ifOverflow="discard" label={{ value: "PW", fill: "#ff6b6b", fontSize: 11, fontWeight: "900", position: "insideTopRight" }} />}
                   {data.gex.callWall && <ReferenceLine y={data.gex.callWall} stroke="#22c55e" strokeDasharray="3 3" ifOverflow="discard" label={{ value: "CW", fill: "#4ade80", fontSize: 11, fontWeight: "900", position: "insideTopRight" }} />}
                   {data.days.map((d, i) => d.events.length > 0 ? <ReferenceLine key={`ev-${i}`} x={d.date.slice(8)} stroke="#fbbf24" strokeDasharray="2 2" /> : null)}
