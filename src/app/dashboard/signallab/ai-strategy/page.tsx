@@ -22,7 +22,7 @@ import {
   BarChart3,
 } from "lucide-react";
 
-const DEFAULT_PERSONAL = "NASA,RKLB,DRAM,MRVL,NNE,AMBA,CBRS,OSCR,EOSE,BMNR,IREN,CLS,MU,CRDO,SNDK,AAOI,PENG,GLW";
+const DEFAULT_PERSONAL = "NASA,RKLB,DRAM,MRVL,NNE,AMBA,CBRS,OSCR,EOSE,BMNR,IREN,CLS,MU,CRDO,SNDK,AAOI,PENG,GLW,BE,LITE";
 
 function scoreColor(score: number): string {
   if (score >= 65) return "text-emerald-400";

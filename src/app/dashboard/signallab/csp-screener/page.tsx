@@ -29,7 +29,7 @@ type Group = CSPScan["groups"][number];
 
 type SortKey = "score" | "maxIV" | "maxYield" | "ticker";
 
-const DEFAULT_CSP_LIST = "NASA,RKLB,DRAM,MRVL,NNE,AMBA,CBRS,OSCR,EOSE,BMNR,IREN,CLS,MU,CRDO,SNDK,AAOI,PENG,GLW";
+const DEFAULT_CSP_LIST = "NASA,RKLB,DRAM,MRVL,NNE,AMBA,CBRS,OSCR,EOSE,BMNR,IREN,CLS,MU,CRDO,SNDK,AAOI,PENG,GLW,BE,LITE";
 const IV_BUCKETS = ["all", "below-70", "70-100", "100-140", "140+"] as const;
 
 interface BasketItem {
@@ -143,7 +143,7 @@ function TickerGroup({ group, onAdd, maxStrike }: { group: Group; onAdd: (s: Pic
           <IVClassBadge ivClass={group.bestClass} />
         </div>
         <div className="flex items-center gap-5 text-sm font-bold text-white/90 tabular-nums ml-auto">
-          {pw && <span className="text-red-400">PW: ${pw.toFixed(0)}</span>}
+          {pw && <span className="text-red-400">Put Wall: ${pw.toFixed(0)}</span>}
           {best && (
             <span className="hidden sm:inline w-[140px]">
               En iyi <span className="text-white">${best.strike.toFixed(0)}P</span>

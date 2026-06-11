@@ -37,6 +37,14 @@ export function useScanState({ prefix, defaultList, defaultBudget }: ScanStateOp
 
   // Hydrate from localStorage after mount
   useEffect(() => {
+    const LIST_VERSION = "2"; // Increment when defaultList changes
+    const savedVersion = localStorage.getItem(`${prefix}_list_version`);
+    if (savedVersion !== LIST_VERSION) {
+      // Default list updated — reset to new default
+      localStorage.removeItem(`${prefix}_my_list`);
+      localStorage.setItem(`${prefix}_list_version`, LIST_VERSION);
+    }
+
     const m = localStorage.getItem(`${prefix}_mode`) as ScanMode | null;
     if (m) setMode(m);
     const l = localStorage.getItem(`${prefix}_my_list`);

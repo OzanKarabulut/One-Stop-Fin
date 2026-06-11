@@ -6,7 +6,7 @@ export const TICKER_CATEGORIES: TickerCategory[] = [
   { id: "health", label: "Sağlık", tickers: ["UNH","LLY","PFE","MRK","ABBV","BMY","MRNA","HIMS","CVS","GILD"] },
   { id: "consumer", label: "Tüketici", tickers: ["KO","PEP","PG","WMT","COST","MCD","SBUX","TGT","NKE","DG"] },
   { id: "financials", label: "Finans", tickers: ["JPM","BAC","GS","MS","C","SCHW","HOOD","COIN","PYPL","AXP"] },
-  { id: "energy", label: "Enerji", tickers: ["XOM","CVX","OXY","SLB","DVN","HAL","FANG"] },
+  { id: "energy", label: "Enerji", tickers: ["XOM","CVX","OXY","SLB","DVN","HAL","FANG","BE"] },
   { id: "highiv", label: "Yüksek IV", tickers: ["PLTR","SOFI","MARA","RIOT","AFRM","UPST","IONQ","RKLB","CLSK","RIVN"] },
   { id: "etf", label: "ETF", tickers: ["SPY","QQQ","IWM","XLE","XLF","GDX","TLT","SLV","SMH"] },
 ];
