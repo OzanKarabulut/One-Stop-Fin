@@ -2,11 +2,12 @@
 
 import { trpc } from "@/lib/trpc/client";
 import { TickerChips, resolveTickers } from "@/components/ui/TickerChips";
-import { DetayButton, DetailPanel } from "@/components/ui/DetailPanel";
+import { DetailPanel } from "@/components/ui/DetailPanel";
 import type { DetailContent } from "@/components/ui/DetailPanel";
 import { BROAD_UNIVERSE } from "@/lib/ticker-universe";
 import type { TickerCategory } from "@/lib/ticker-universe";
 import { useScanState } from "@/hooks/useScanState";
+import { classifyDropState } from "@/lib/anomaly-state";
 import { useState, useEffect, useMemo } from "react";
 
 const EXTRA_CATS: TickerCategory[] = [{ id: "broad", label: "Geniş Evren", tickers: BROAD_UNIVERSE }];
@@ -156,8 +157,20 @@ export default function AnomalyRadarPage() {
 }
 
 // eslint-disable-next-line
+function TrendBadge({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
+  const positive = value >= 0;
+  const base = positive ? "bg-emerald-500/20 text-emerald-400" : "bg-red-500/20 text-red-400";
+  const dim = highlight === false ? "opacity-50" : "";
+  return (
+    <span className={`rounded px-2 py-0.5 text-xs font-bold ${base} ${dim}`}>
+      {label} {value >= 0 ? "+" : ""}{(value * 100).toFixed(1)}%
+    </span>
+  );
+}
+
 function AnomalyCardRow({ c, sortMode }: { c: any; sortMode: "math" | "balanced" }) {
   const [detayOpen, setDetayOpen] = useState(false);
+  const dropState = classifyDropState(c.drop1d);
   const detayContent: DetailContent = {
     title: `${c.ticker} — Anomali Analizi`,
     logic: `Düşüş: ${(c.triggerDrop * 100).toFixed(1)}% (${c.trigger}) → ${c.sigmaMove.toFixed(1)}σ\n1g: ${(c.drop1d * 100).toFixed(1)}% · dün: ${(c.prevDayDrop * 100).toFixed(1)}% · 3g: ${(c.drop3d * 100).toFixed(1)}%\nHV20: ${(c.hv20 * 100).toFixed(0)}% · IV: %${c.ivPct.toFixed(0)} · IV/HV: ${c.ivHvRatio.toFixed(1)}x\nSektör (${c.trigger}): ${(c.sectorRel * 100).toFixed(1)}% → ${c.sectorLabel}\n5g: ${(c.dd5 * 100).toFixed(1)}% → ×${(1 + Math.abs(c.dd5)).toFixed(2)}${c.premiumFactor != null && c.premiumFactor < 1 ? ` · prim ×${c.premiumFactor.toFixed(2)}` : ""}\nSkor: ${c.opportunityScore.toFixed(2)} → ${c.displayScore}/100\nKalite: ${c.qualityScore ?? "?"}/100 (${c.qualitySource ?? "?"}) — ${(c.qualityWhy ?? []).join(", ")}\nDenge = ${c.displayScore} × ${c.qualityScore ?? "?"}/100 = ${c.balancedScore ?? "?"}`,
@@ -173,26 +186,31 @@ function AnomalyCardRow({ c, sortMode }: { c: any; sortMode: "math" | "balanced"
       <div className="flex items-center justify-between">
         {/* LEFT: content */}
         <div className="flex-1 min-w-0 space-y-1.5">
+          {/* Row 1: ticker, spot, trend badges */}
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xl font-bold text-white">{c.ticker}</span>
             <span className="text-lg font-bold text-white">${c.spot.toFixed(2)}</span>
-            <span className="bg-red-500/20 text-red-400 font-bold text-sm rounded px-2 py-0.5">{c.trigger} {(c.triggerDrop * 100).toFixed(1)}%</span>
-            <span className="text-xs font-bold text-white/70">
-              {c.trigger === "dün" && `bugün ${c.drop1d >= 0 ? "+" : ""}${(c.drop1d * 100).toFixed(1)}% (${c.drop1d >= 0 ? "toparlama" : "devam"})`}
-              {c.trigger === "bugün" && `5g: ${(c.dd5 * 100).toFixed(1)}%`}
-              {c.trigger === "3g" && `bugün: ${(c.drop1d * 100).toFixed(1)}% · 5g: ${(c.dd5 * 100).toFixed(1)}%`}
+            <TrendBadge label="bugün" value={c.drop1d} highlight={c.trigger === "bugün"} />
+            <TrendBadge label="dün" value={c.prevDayDrop} highlight={c.trigger === "dün"} />
+            <TrendBadge label="5g" value={c.dd5} highlight={false} />
+            {c.trigger === "3g" && <TrendBadge label="3g" value={c.drop3d} highlight={true} />}
+            <span className={`rounded px-2 py-0.5 text-xs font-bold ${dropState === "recovery" ? "bg-emerald-500/20 text-emerald-400" : "bg-red-500/20 text-red-400"}`}>
+              {dropState === "recovery" ? "toparlama" : "düşüş devam"}
             </span>
-            {c.trigger !== "bugün" && <span className="text-xs font-bold text-white/70">5g: {(c.dd5 * 100).toFixed(1)}%</span>}
+          </div>
+          {/* Row 2: σ, sector, IV/HV, earnings */}
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="font-bold text-white text-xs">{c.sigmaMove.toFixed(1)}σ</span>
             <span className="bg-white/10 text-white/90 font-bold text-[11px] rounded px-1.5 py-0.5">{c.sectorLabel}</span>
             <span className={`font-bold text-[11px] rounded px-1.5 py-0.5 ${c.ivHvRatio < 1 ? "bg-white/10 text-white/60" : "bg-white/10 text-white/90"}`}>IV/HV {c.ivHvRatio.toFixed(1)}x</span>
-            {c.earningsInWin && <span className="bg-white/10 text-white/90 font-bold text-[11px] rounded px-1.5 py-0.5">📊</span>}
+            {c.earningsInWin === true && <span className="bg-amber-500/20 text-amber-400 font-bold text-[11px] rounded px-1.5 py-0.5">ER vade içinde</span>}
           </div>
+          {/* Strike suggestions */}
           {c.conservative && !c.aggressive && (
-            <div className="text-xs font-bold text-white/90 truncate">🛡 ${c.conservative.strike}P — ${c.conservative.premium.toFixed(2)} · %{c.conservative.annualizedYieldPct.toFixed(0)}/yıl · %{(c.conservative.buffer * 100).toFixed(0)} tampon</div>
+            <div className="text-xs font-bold text-white/90 truncate">🛡 ${c.conservative.strike}P — ${c.conservative.premium.toFixed(2)} · %{c.conservative.annualizedYieldPct.toFixed(0)}/yıl · %{(c.conservative.buffer * 100).toFixed(0)} tampon · {c.dte} DTE</div>
           )}
           {c.conservative && c.aggressive && (
-            <div className="text-xs font-bold text-white/90 truncate">🛡 ${c.conservative.strike}P %{c.conservative.annualizedYieldPct.toFixed(0)}/yıl · ⚡ ${c.aggressive.strike}P %{c.aggressive.annualizedYieldPct.toFixed(0)}/yıl</div>
+            <div className="text-xs font-bold text-white/90 truncate">🛡 ${c.conservative.strike}P %{c.conservative.annualizedYieldPct.toFixed(0)}/yıl · %{(c.conservative.buffer * 100).toFixed(0)} tampon   ⚡ ${c.aggressive.strike}P %{c.aggressive.annualizedYieldPct.toFixed(0)}/yıl · %{(c.aggressive.buffer * 100).toFixed(0)} tampon   {c.dte} DTE</div>
           )}
           {c.conservative && (
             <div className="text-[11px] font-bold text-white/60 truncate">Plan B: ${c.conservative.effectiveCost.toFixed(2)} maliyet (%{(c.conservative.effectiveCostVsSpotPct * 100).toFixed(0)} iskonto)</div>
