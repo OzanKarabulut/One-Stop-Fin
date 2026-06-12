@@ -886,7 +886,19 @@ export const signallabRouter = router({
         const today = new Date();
         const todayStr = today.toISOString().slice(0, 10);
         const madeOnDay = new Date(todayStr + "T00:00:00Z");
-        const targetDays = nextTradingDays(today, 5);
+
+        // Dynamic day count: trading days from today to targetDate
+        const targetEnd = new Date(input.targetDate + "T00:00:00Z");
+        let dynamicCount = 0;
+        const cursor = new Date(today);
+        while (cursor < targetEnd && dynamicCount < 30) {
+          cursor.setUTCDate(cursor.getUTCDate() + 1);
+          const dow = cursor.getUTCDay();
+          if (dow !== 0 && dow !== 6) dynamicCount++;
+        }
+        if (dynamicCount < 1) dynamicCount = 5;
+
+        const targetDays = nextTradingDays(today, dynamicCount);
         const lastDay = targetDays[targetDays.length - 1];
         const lastDayStr = lastDay.toISOString().slice(0, 10);
 
