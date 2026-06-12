@@ -103,36 +103,49 @@ async function main() {
     console.log("[start-local] Seed atlandı veya zaten mevcut.");
   }
 
-  // ─── Build tazeliği kontrolü ───────────────────────────────────────────
-  const buildRevFile = path.join(PROJECT_DIR, ".next", ".build-git-rev");
-  const buildIdFile = path.join(PROJECT_DIR, ".next", "BUILD_ID");
-  let currentRev = "";
-  try { currentRev = execSync("git rev-parse HEAD", { cwd: PROJECT_DIR, encoding: "utf-8" }).trim(); } catch {}
-  let savedRev = "";
-  try { savedRev = readFileSync(buildRevFile, "utf-8").trim(); } catch {}
+  // ─── Mode ───────────────────────────────────────────────────────────────
+  const MODE = process.env.ONESTOPFIN_MODE === "prod" ? "prod" : "dev";
 
-  const needsBuild = !existsSync(buildIdFile) || savedRev !== currentRev;
+  if (MODE === "prod") {
+    // ─── Build tazeliği kontrolü ─────────────────────────────────────────
+    const buildRevFile = path.join(PROJECT_DIR, ".next", ".build-git-rev");
+    const buildIdFile = path.join(PROJECT_DIR, ".next", "BUILD_ID");
+    let currentRev = "";
+    try { currentRev = execSync("git rev-parse HEAD", { cwd: PROJECT_DIR, encoding: "utf-8" }).trim(); } catch {}
+    let savedRev = "";
+    try { savedRev = readFileSync(buildRevFile, "utf-8").trim(); } catch {}
 
-  if (needsBuild) {
-    console.log("[start-local] Build eski/yok, önce build alınıyor...");
-    execSync("npx next build", {
+    const needsBuild = !existsSync(buildIdFile) || savedRev !== currentRev;
+
+    if (needsBuild) {
+      console.log("[start-local] Build eski/yok, önce build alınıyor...");
+      execSync("npx next build", {
+        cwd: PROJECT_DIR,
+        stdio: "inherit",
+        env: { ...process.env, DATABASE_URL },
+      });
+      try { writeFileSync(buildRevFile, currentRev, "utf-8"); } catch {}
+      console.log("[start-local] Build tamamlandı.");
+    } else {
+      console.log("[start-local] Build güncel, next start...");
+    }
+
+    // ─── Next.js production server ───────────────────────────────────────
+    console.log("[start-local] Next.js başlatılıyor (prod)...");
+    next = spawn("npx", ["next", "start", "--port", "3000"], {
       cwd: PROJECT_DIR,
       stdio: "inherit",
-      env: { ...process.env, DATABASE_URL },
+      env: { ...process.env, DATABASE_URL, PORT: "3000" },
     });
-    try { writeFileSync(buildRevFile, currentRev, "utf-8"); } catch {}
-    console.log("[start-local] Build tamamlandı.");
   } else {
-    console.log("[start-local] Build güncel, next start...");
+    // ─── Next.js dev server (hot reload) ─────────────────────────────────
+    console.log("[start-local] Next.js başlatılıyor (dev, hot reload)...");
+    next = spawn("npx", ["next", "dev", "--port", "3000"], {
+      cwd: PROJECT_DIR,
+      stdio: "inherit",
+      env: { ...process.env, DATABASE_URL, PORT: "3000" },
+    });
   }
-
-  // ─── Next.js production server ─────────────────────────────────────────
-  console.log("[start-local] Next.js başlatılıyor (prod)...");
-  next = spawn("npx", ["next", "start", "--port", "3000"], {
-    cwd: PROJECT_DIR,
-    stdio: "inherit",
-    env: { ...process.env, DATABASE_URL, PORT: "3000" },
-  });
 
   next.on("exit", async (code) => {
     if (!shuttingDown) {

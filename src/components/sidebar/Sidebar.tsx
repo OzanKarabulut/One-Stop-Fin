@@ -23,10 +23,10 @@ interface FavoriteItem { href: string; labelKey: string; order: number; }
 function SubItem({ href, label, isActive, starred, onStar, icon: Icon }: { href: string; label: string; isActive: boolean; starred: boolean; onStar: () => void; icon?: LucideIcon }) {
   const router = useRouter();
   return (
-    <div className={`group flex items-center h-[38px] pl-[32px] pr-3 transition-colors cursor-pointer ${isActive ? "bg-[#141414] border-l-2 border-[#ff7200]" : "hover:bg-white/[0.03] border-l-2 border-transparent"}`}
+    <div className={`group flex items-center h-[38px] pl-[32px] pr-3 transition-colors cursor-pointer ${isActive ? "bg-[#141414] border-l-2 border-[#ff7200]" : "hover:bg-white/30 border-l-2 border-transparent"}`}
       onClick={() => router.push(href)}>
-      {Icon && <Icon size={14} className={`mr-2 shrink-0 ${isActive ? "text-[#ff7200]" : "text-white/80"}`} />}
-      <span className={`text-sm flex-1 tracking-tight ${isActive ? "text-[#ff7200] font-bold" : "text-white font-semibold"}`}>{label}</span>
+      {Icon && <Icon size={14} className={`mr-2 shrink-0 ${isActive ? "text-[#ff7200]" : "text-white/80 group-hover:text-white"}`} />}
+      <span className={`text-sm flex-1 tracking-tight ${isActive ? "text-[#ff7200] font-bold" : "text-white/90 font-semibold group-hover:text-white"}`}>{label}</span>
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); onStar(); }}

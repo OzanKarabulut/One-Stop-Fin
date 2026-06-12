@@ -18,18 +18,23 @@ fi
 
 # === 1. Health OK ise sadece Chrome aç ===
 if curl -sf "$HEALTH_URL" >/dev/null 2>&1; then
-  CUR_REV=$(git -C "$PROJECT_DIR" rev-parse HEAD 2>/dev/null)
-  SRV_REV=$(cat "$PROJECT_DIR/.next/.build-git-rev" 2>/dev/null)
-  if [ -n "$CUR_REV" ] && [ -n "$SRV_REV" ] && [ "$CUR_REV" != "$SRV_REV" ]; then
-    RESPONSE=$(osascript -e 'display alert "One-Stop-Fin" message "Yeni sürüm var (kod güncellenmiş). Yeniden başlatılsın mı?" buttons {"Eski sürümle aç", "Yeniden başlat"} default button "Yeniden başlat"' 2>&1)
-    if echo "$RESPONSE" | grep -q "Yeniden"; then
-      kill $(cat "$PID_FILE" 2>/dev/null) 2>/dev/null
-      WAIT=0
-      while kill -0 $(cat "$PID_FILE" 2>/dev/null) 2>/dev/null && [ $WAIT -lt 15 ]; do
-        sleep 1; WAIT=$((WAIT+1))
-      done
-      rm -f "$PID_FILE"
-      # Normal başlatma akışına devam et
+  if [ "$ONESTOPFIN_MODE" = "prod" ]; then
+    CUR_REV=$(git -C "$PROJECT_DIR" rev-parse HEAD 2>/dev/null)
+    SRV_REV=$(cat "$PROJECT_DIR/.next/.build-git-rev" 2>/dev/null)
+    if [ -n "$CUR_REV" ] && [ -n "$SRV_REV" ] && [ "$CUR_REV" != "$SRV_REV" ]; then
+      RESPONSE=$(osascript -e 'display alert "One-Stop-Fin" message "Yeni sürüm var (kod güncellenmiş). Yeniden başlatılsın mı?" buttons {"Eski sürümle aç", "Yeniden başlat"} default button "Yeniden başlat"' 2>&1)
+      if echo "$RESPONSE" | grep -q "Yeniden"; then
+        kill $(cat "$PID_FILE" 2>/dev/null) 2>/dev/null
+        WAIT=0
+        while kill -0 $(cat "$PID_FILE" 2>/dev/null) 2>/dev/null && [ $WAIT -lt 15 ]; do
+          sleep 1; WAIT=$((WAIT+1))
+        done
+        rm -f "$PID_FILE"
+        # Normal başlatma akışına devam et
+      else
+        open -na "Google Chrome" --args --app=http://localhost:3000
+        exit 0
+      fi
     else
       open -na "Google Chrome" --args --app=http://localhost:3000
       exit 0
@@ -132,7 +137,7 @@ wait_with_dialog() {
 wait_with_dialog "PostgreSQL başlatılıyor" "nc -z localhost 5432" 60
 
 # Faz 2: HTTP health
-wait_with_dialog "Next.js başlatılıyor (ilk açılışta build alınır)" "curl -sf $HEALTH_URL >/dev/null" 120
+wait_with_dialog "Next.js başlatılıyor (ilk derleme biraz sürebilir)" "curl -sf $HEALTH_URL >/dev/null" 120
 
 # === 6. Chrome aç ===
 open -na "Google Chrome" --args --app=http://localhost:3000
