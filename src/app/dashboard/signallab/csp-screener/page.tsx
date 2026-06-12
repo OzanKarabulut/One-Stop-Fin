@@ -8,6 +8,7 @@ import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/server/root";
 import { useScanState } from "@/hooks/useScanState";
 import { TickerChips, resolveTickers } from "@/components/ui/TickerChips";
+import { DEFAULT_PERSONAL_LIST } from "@/lib/ticker-universe";
 import { usd, otmPct } from "@/lib/format";
 import {
   TrendingUp,
@@ -29,7 +30,7 @@ type Group = CSPScan["groups"][number];
 
 type SortKey = "score" | "maxIV" | "maxYield" | "ticker";
 
-const DEFAULT_CSP_LIST = "NASA,RKLB,DRAM,MRVL,NNE,AMBA,CBRS,OSCR,EOSE,BMNR,IREN,CLS,MU,CRDO,SNDK,AAOI,PENG,GLW,BE,LITE";
+const DEFAULT_CSP_LIST = DEFAULT_PERSONAL_LIST;
 const IV_BUCKETS = ["all", "below-70", "70-100", "100-140", "140+"] as const;
 
 interface BasketItem {

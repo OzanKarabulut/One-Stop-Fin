@@ -7,6 +7,7 @@ import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/server/root";
 import { useScanState } from "@/hooks/useScanState";
 import { TickerChips, resolveTickers } from "@/components/ui/TickerChips";
+import { DEFAULT_PERSONAL_LIST } from "@/lib/ticker-universe";
 import { usd } from "@/lib/format";
 import { pnlAt, type Leg } from "@/lib/real-world-pricing";
 import {
@@ -22,7 +23,7 @@ import {
   BarChart3,
 } from "lucide-react";
 
-const DEFAULT_PERSONAL = "NASA,RKLB,DRAM,MRVL,NNE,AMBA,CBRS,OSCR,EOSE,BMNR,IREN,CLS,MU,CRDO,SNDK,AAOI,PENG,GLW,BE,LITE";
+const DEFAULT_PERSONAL = DEFAULT_PERSONAL_LIST;
 
 function scoreColor(score: number): string {
   if (score >= 65) return "text-emerald-400";

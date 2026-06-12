@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { trpc } from "@/lib/trpc/client";
 import { useScanState } from "@/hooks/useScanState";
 import { TickerChips, resolveTickers } from "@/components/ui/TickerChips";
+import { DEFAULT_PERSONAL_LIST } from "@/lib/ticker-universe";
 import { cn } from "@/lib/utils";
 import { TrendingUp, Loader2, AlertTriangle, Activity } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Cell } from "recharts";
@@ -12,7 +13,7 @@ import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/server/root";
 import { gateDetail, gexDetail } from "@/lib/detail-content";
 
-const DEFAULT_CSP_LIST = "NASA,RKLB,DRAM,MRVL,NNE,AMBA,CBRS,OSCR,EOSE,BMNR,IREN,CLS,MU,CRDO,SNDK,AAOI,PENG,GLW,BE,LITE";
+const DEFAULT_CSP_LIST = DEFAULT_PERSONAL_LIST;
 
 type VolResult = inferRouterOutputs<AppRouter>["signallab"]["volScan"]["results"][number];
 

@@ -357,12 +357,23 @@ export const signallabRouter = router({
 
       const sortByScore = (a: CSPContract, b: CSPContract) => b.cspScore - a.cspScore || b.executablePremiumAmount - a.executablePremiumAmount;
       const eligible = allContracts.filter((c) => !c.rejected && c.cspScore > 0);
+      const uniqueTop = (list: typeof eligible, n: number) => {
+        const seen = new Set<string>();
+        const result: typeof eligible = [];
+        for (const c of list) {
+          if (seen.has(c.ticker)) continue;
+          seen.add(c.ticker);
+          result.push(c);
+          if (result.length >= n) break;
+        }
+        return result;
+      };
       const topPicks = {
-        "all": eligible.sort(sortByScore).slice(0, 3),
-        "below-70": eligible.filter((c) => c.ivBucket === "below-70").sort(sortByScore).slice(0, 3),
-        "70-100": eligible.filter((c) => c.ivBucket === "70-100").sort(sortByScore).slice(0, 3),
-        "100-140": eligible.filter((c) => c.ivBucket === "100-140").sort(sortByScore).slice(0, 3),
-        "140+": eligible.filter((c) => c.ivBucket === "140+").sort(sortByScore).slice(0, 3),
+        "all": uniqueTop(eligible.sort(sortByScore), 3),
+        "below-70": uniqueTop(eligible.filter((c) => c.ivBucket === "below-70").sort(sortByScore), 3),
+        "70-100": uniqueTop(eligible.filter((c) => c.ivBucket === "70-100").sort(sortByScore), 3),
+        "100-140": uniqueTop(eligible.filter((c) => c.ivBucket === "100-140").sort(sortByScore), 3),
+        "140+": uniqueTop(eligible.filter((c) => c.ivBucket === "140+").sort(sortByScore), 3),
       };
 
       return { groups, topPicks, diagnostics: allDiags.sort((a, b) => a.ticker.localeCompare(b.ticker)), classDist, totalContracts: allContracts.length, capped, originalCount };

@@ -46,6 +46,8 @@ export function sectorEtfFor(ticker: string): string {
 // User's judgment beats the auto quality score. 0-100. Edit freely.
 export const QUALITY_OVERRIDES: Record<string, number> = { MSTR: 25, LCID: 20 };
 
+export const DEFAULT_PERSONAL_LIST = "NASA,RKLB,DRAM,MRVL,NNE,AMBA,CBRS,OSCR,EOSE,BMNR,IREN,CLS,MU,CRDO,SNDK,AAOI,PENG,GLW,BE,LITE,SMCI";
+
 export const KNOWN_ETFS = new Set([
   "SPY","QQQ","IWM","XLE","XLF","XLK","XLV","XLP","XLI","XLU","XBI","GDX","TLT","SLV","SMH",
   "ARKK","KWEB","FXI","EEM","EWZ","GLD","USO","HYG","KRE","JETS","TAN","URA","XME",
