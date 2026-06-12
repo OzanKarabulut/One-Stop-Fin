@@ -69,7 +69,7 @@ export function Sidebar() {
     <aside className="w-[264px] h-screen bg-[#060606] border-r border-white/[0.08] flex flex-col overflow-y-auto shrink-0">
 
       {/* Brand */}
-      <Link href="/dashboard" className="flex items-center gap-3 h-[68px] px-4 border-b border-white/[0.08] hover:bg-white/[0.03] transition-colors">
+      <Link href="/dashboard" className="flex items-center gap-3 h-[68px] px-4 border-b border-white/[0.12] hover:bg-white/[0.03] transition-colors">
         <div className="w-10 h-10 rounded-lg bg-[#ff7200] flex items-center justify-center border-2 border-[#ff7200]/60 shadow-lg shadow-[#ff7200]/20">
           <span className="text-white text-lg font-bold">O</span>
         </div>
@@ -77,11 +77,13 @@ export function Sidebar() {
       </Link>
 
       {/* Home */}
-      <Link href="/dashboard"
-        className={`flex items-center h-[44px] px-4 gap-3 transition-colors ${pathname === "/dashboard" ? "bg-[#141414] text-[#ff7200]" : "text-white hover:bg-white/[0.03]"}`}>
-        <Home size={18} className="text-[#ff7200]" />
-        <span className="text-base font-bold tracking-tight">Ana Sayfa</span>
-      </Link>
+      <div className="py-2">
+        <Link href="/dashboard"
+          className={`flex items-center h-[44px] px-4 gap-3 transition-colors ${pathname === "/dashboard" ? "bg-[#141414] text-[#ff7200] border-l-2 border-[#ff7200]" : "text-white hover:bg-white/[0.03] border-l-2 border-transparent"}`}>
+          <Home size={18} className="text-[#ff7200]" />
+          <span className="text-base font-bold tracking-tight">Ana Sayfa</span>
+        </Link>
+      </div>
 
       {/* Favorites */}
       {favorites.length > 0 && (
